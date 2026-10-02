@@ -1,0 +1,67 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "clipforge"
+version = "0.1.0"
+description = "Clipping automatique de vidéos YouTube/Twitch vers des clips verticaux pour TikTok."
+requires-python = ">=3.11"
+dependencies = [
+    "yt-dlp",
+    "static-ffmpeg",
+    "faster-whisper",
+    "fastapi",
+    "uvicorn[standard]",
+    "httpx",
+    "feedparser",
+    "python-dotenv",
+    "apscheduler",
+    "jinja2",
+    "python-multipart",
+    "sqlalchemy>=2",
+    "pydantic>=2",
+    "pydantic-settings",
+    "pyyaml",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "pytest-cov",
+    "ruff",
+    "mypy",
+    "pre-commit",
+    "types-PyYAML",
+]
+
+[project.scripts]
+clipforge = "clipforge.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra --strict-markers"
+markers = [
+    "integration: tests lents ou qui touchent au réseau / à FFmpeg",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "S", "C4", "SIM"]
+ignore = ["S101"]  # assert autorisé (tests)
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = false
+ignore_missing_imports = true
+files = ["src"]

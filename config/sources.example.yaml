@@ -1,0 +1,13 @@
+# Modèle de liste de chaînes surveillées. Copie en config/sources.yaml (ignoré par git
+# si tu y mets des chaînes privées) ou gère-les directement depuis le dashboard.
+sources:
+  - platform: youtube
+    channel: "https://www.youtube.com/@exemple"
+    enabled: true
+    min_duration_s: 300
+    max_duration_s: 10800
+    ignore_keywords: ["live", "rediffusion"]
+  - platform: twitch
+    channel: "exemple_streamer"
+    enabled: true
+    max_duration_s: 10800
