@@ -21,6 +21,13 @@ class Settings(BaseSettings):
     twitch_client_id: str = ""
     twitch_client_secret: str = ""
 
+    # Modèles
+    gemini_model: str = "gemini-2.5-flash"
+    groq_model: str = "openai/gpt-oss-120b"
+    openrouter_model: str = "openai/gpt-oss-120b:free"
+    groq_whisper_model: str = "whisper-large-v3-turbo"
+    local_whisper_model: str = "small"
+
     # Stockage
     data_dir: Path = ROOT / "data"
 
@@ -28,7 +35,20 @@ class Settings(BaseSettings):
     max_video_height: int = 720
     max_source_duration_s: int = 3 * 3600
     initial_import_count: int = 2  # nb de vidéos prises à l'ajout d'une chaîne
+    watch_window: int = 15  # nb de vidéos récentes examinées à chaque relevé
     poll_interval_minutes: int = 30
+    max_pending_clips: int = 50  # au-delà, la file de traitement se met en pause
+
+    # Clips
+    clip_min_s: int = 20
+    clip_max_s: int = 60
+    max_clips_per_video: int = 6
+    min_clip_score: int = 60
+    layout: str = "blur_fit"  # blur_fit | crop
+    out_width: int = 1080
+    out_height: int = 1920
+    font_name: str = "Arial"
+    fonts_dir: str = "C:/Windows/Fonts"
 
     @property
     def provider_order(self) -> list[str]:
