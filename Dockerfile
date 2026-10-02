@@ -13,4 +13,4 @@ RUN useradd --create-home clipforge && mkdir -p /app/data && chown -R clipforge 
 USER clipforge
 
 EXPOSE 8000
-CMD ["uvicorn", "clipforge.web.app:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "clipforge.web.app:app_factory", "--factory", "--host", "0.0.0.0", "--port", "8000"]

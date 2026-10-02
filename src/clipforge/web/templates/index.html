@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% from "_cards.html" import video_card, channel_filters %}
+{% block autorefresh %}{{ '1' if videos | selectattr('status', 'in', ['processing', 'pending']) | list else '0' }}{% endblock %}
+{% block content %}
+<h1>À poster</h1>
+<p class="sub">Une vidéo source = un bloc. Clique dessus pour voir tous ses clips.</p>
+{{ channel_filters(channels, channel, '/') }}
+{% if videos %}
+<div class="grid">
+  {% for v in videos %}{{ video_card(v) }}{% endfor %}
+</div>
+{% else %}
+<div class="empty">Rien à poster pour l'instant.<br>Ajoute une chaîne ou un lien dans <a href="/sources" style="text-decoration:underline">Sources</a>.</div>
+{% endif %}
+{% endblock %}

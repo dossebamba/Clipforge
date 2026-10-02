@@ -1,0 +1,37 @@
+{% macro video_card(v) %}
+{% set total = v.clips | length %}
+{% set posted = v.count('posted') %}
+<a class="card" href="/video/{{ v.id }}">
+  <div class="thumb" style="background-image:url('{{ v.thumbnail }}')">
+    {% if v.duration_s %}<span class="badge">{{ v.duration_s | dur }}</span>{% endif %}
+  </div>
+  <div class="body">
+    <div class="title">{{ v.title or v.url }}</div>
+    <div class="meta">{{ v.origin }}</div>
+    <div class="row" style="margin-top:8px">
+      {% if v.status == 'done' %}
+        <span class="badge ok">{{ v.count('ready') }} à poster</span>
+        {% if posted %}<span class="badge">{{ posted }} postés</span>{% endif %}
+      {% elif v.status == 'processing' %}
+        <span class="badge warn">⏳ {{ v.stage | stage }}</span>
+      {% else %}
+        <span class="badge">En attente de traitement</span>
+      {% endif %}
+    </div>
+    {% if total %}
+    <div class="progress"><i style="width: {{ (posted * 100 / total) | round }}%"></i></div>
+    {% endif %}
+  </div>
+</a>
+{% endmacro %}
+
+{% macro channel_filters(channels, channel, base) %}
+{% if channels | length > 1 %}
+<div class="filters">
+  <a class="chip {{ 'on' if not channel }}" href="{{ base }}">Toutes les chaînes</a>
+  {% for c in channels %}
+  <a class="chip {{ 'on' if c == channel }}" href="{{ base }}?channel={{ c | urlencode }}">{{ c }}</a>
+  {% endfor %}
+</div>
+{% endif %}
+{% endmacro %}

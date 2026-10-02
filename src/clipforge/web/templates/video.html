@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block title %}{{ video.title }} · Clipforge{% endblock %}
+{% block autorefresh %}{{ '1' if video.status in ['processing', 'pending'] else '0' }}{% endblock %}
+{% block content %}
+<a class="back" href="{{ '/published' if video.is_published else '/' }}">← Retour</a>
+<h1>{{ video.title or video.url }}</h1>
+<p class="sub">
+  {{ video.origin }} · <a href="{{ video.url }}" target="_blank" rel="noopener" style="text-decoration:underline">source</a>
+  · {{ video.count('ready') }} à poster · {{ video.count('posted') }} postés
+</p>
+
+{% if video.status in ['processing', 'pending'] %}
+<div class="panel">⏳ {{ video.stage | stage if video.stage else 'En attente de traitement' }}… la page se rafraîchit toute seule.</div>
+{% elif video.status == 'failed' %}
+<div class="panel"><span class="err">Échec : {{ video.error }}</span>
+  <form method="post" action="/videos/{{ video.id }}/retry" style="margin-top:10px"><button>Réessayer</button></form></div>
+{% elif not video.clips %}
+<div class="panel">{{ video.error or 'Aucun clip pour cette vidéo.' }}</div>
+{% endif %}
+
+<div class="clips">
+{% for c in video.clips %}
+  <div class="clip {{ c.status if c.status != 'ready' }}">
+    <video controls preload="metadata" poster="/media/{{ c.file_path | replace('.mp4', '.jpg') }}" src="/media/{{ c.file_path }}"></video>
+    <div class="body">
+      <div class="row">
+        <span class="badge score">{{ c.score }}</span>
+        <span class="badge">{{ c.duration_s | round | int }} s</span>
+        {% if c.status == 'posted' %}<span class="badge ok">Posté {{ c.posted_at.strftime('%d/%m %H:%M') if c.posted_at }}</span>{% endif %}
+        {% if c.status == 'rejected' %}<span class="badge bad">Rejeté</span>{% endif %}
+      </div>
+      <div><b>{{ c.title }}</b>{% if c.reason %}<div class="meta">{{ c.reason }}</div>{% endif %}</div>
+      <form method="post" action="/clips/{{ c.id }}/edit">
+        <textarea id="desc{{ c.id }}" name="description">{{ c.description }}</textarea>
+        {% if c.status == 'posted' %}
+        <input type="text" name="tiktok_url" value="{{ c.tiktok_url }}" placeholder="Lien TikTok du clip (optionnel)" style="margin-top:6px">
+        {% endif %}
+        <div class="row" style="margin-top:8px">
+          <button type="button" class="primary" onclick="copyFrom('desc{{ c.id }}', this)">Copier la description</button>
+          <button type="submit">Enregistrer</button>
+          <a class="btn" href="/clips/{{ c.id }}/download">Télécharger</a>
+        </div>
+      </form>
+      <div class="row">
+        {% if c.status == 'ready' %}
+          <form method="post" action="/clips/{{ c.id }}/posted"><button class="good">✓ Marquer comme posté</button></form>
+          <form method="post" action="/clips/{{ c.id }}/reject"><button class="danger">Rejeter</button></form>
+        {% elif c.status == 'posted' %}
+          <form method="post" action="/clips/{{ c.id }}/unposted"><button>Annuler « posté »</button></form>
+        {% else %}
+          <form method="post" action="/clips/{{ c.id }}/restore"><button>Restaurer</button></form>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+{% endfor %}
+</div>
+
+<form method="post" action="/videos/{{ video.id }}/delete" style="margin-top:30px"
+      onsubmit="return confirm('Supprimer cette vidéo et tous ses clips ?')">
+  <button class="danger">Supprimer cette vidéo</button>
+</form>
+{% endblock %}

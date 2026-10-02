@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Clipforge{% endblock %}</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body data-autorefresh="{% block autorefresh %}0{% endblock %}">
+<header>
+  <div class="bar">
+    <a class="brand" href="/">Clip<b>forge</b></a>
+    <nav>
+      <a href="/" class="{{ 'on' if tab == 'post' }}">À poster{% if stats.ready %} ({{ stats.ready }}){% endif %}</a>
+      <a href="/published" class="{{ 'on' if tab == 'published' }}">Publiés</a>
+      <a href="/sources" class="{{ 'on' if tab == 'sources' }}">Sources</a>
+      <a href="/activity" class="{{ 'on' if tab == 'activity' }}">Activité{% if stats.failed %} <span class="badge bad">{{ stats.failed }}</span>{% endif %}</a>
+    </nav>
+    <div class="stats">
+      <span>Postés aujourd'hui <b>{{ stats.posted_today }}</b></span>
+      <span>Total postés <b>{{ stats.posted }}</b></span>
+      <span>En file <b>{{ stats.queue }}</b></span>
+    </div>
+  </div>
+</header>
+<main>{% block content %}{% endblock %}</main>
+<script src="/static/app.js"></script>
+</body>
+</html>
