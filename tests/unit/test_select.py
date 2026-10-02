@@ -53,6 +53,20 @@ def test_candidate_parsing_is_tolerant():
     assert _clean_hashtags(["foot", "#But!", "foot", "a b"]) == ["#foot", "#But", "#ab"]
 
 
+def test_hashtags_removed_from_description():
+    c = _to_candidate(
+        {
+            "start": 0,
+            "end": 30,
+            "score": 80,
+            "description": "Super moment #foot #but",
+            "hashtags": ["#foot"],
+        }
+    )
+    assert c.description == "Super moment"
+    assert c.hashtags == ["#foot"]
+
+
 def test_caption():
     txt = build_caption("Incroyable.", ["#a", "#b"], "Chaîne")
     assert txt.splitlines()[0] == "Incroyable."

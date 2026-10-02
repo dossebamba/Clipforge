@@ -30,7 +30,9 @@ Transcription, une ligne par phrase au format [secondes] texte :
 
 Propose jusqu'à {n} extraits, chacun entre {min_s} et {max_s} secondes, qui commencent au début
 d'une phrase et finissent à la fin d'une phrase. Les extraits ne doivent pas se chevaucher.
-Écris titre, accroche et description dans la langue de la transcription.
+Écris l'accroche, le titre, la description et les hashtags en {language}, quelle que soit la langue
+de la transcription : tous les champs dans la même langue. Mets les hashtags uniquement dans
+le champ "hashtags", jamais dans la description.
 
 Réponds avec ce JSON exact :
 {{"clips": [{{
@@ -81,6 +83,11 @@ def _clean_hashtags(tags: Any) -> list[str]:
     return out[:6]
 
 
+def _strip_hashtags(text: str) -> str:
+    """Retire les #hashtags collés dans la description (ils sont gérés à part)."""
+    return re.sub(r"\s*#\w+", "", text, flags=re.UNICODE).strip()
+
+
 def _to_candidate(raw: dict[str, Any]) -> Candidate | None:
     try:
         return Candidate(
@@ -89,7 +96,7 @@ def _to_candidate(raw: dict[str, Any]) -> Candidate | None:
             score=int(float(raw.get("score", 0))),
             hook=str(raw.get("hook", "")).strip(),
             title=str(raw.get("title", "")).strip(),
-            description=str(raw.get("description", "")).strip(),
+            description=_strip_hashtags(str(raw.get("description", ""))),
             hashtags=_clean_hashtags(raw.get("hashtags")),
             reason=str(raw.get("reason", "")).strip(),
         )
@@ -154,6 +161,7 @@ def select_clips(
             title=title,
             channel=channel or "inconnue",
             transcript=_fmt_transcript(part),
+            language=settings.content_language,
             n=per_window,
             min_s=settings.clip_min_s,
             max_s=settings.clip_max_s,

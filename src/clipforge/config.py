@@ -22,7 +22,7 @@ class Settings(BaseSettings):
     twitch_client_secret: str = ""
 
     # Modèles
-    gemini_model: str = "gemini-2.5-flash"
+    gemini_model: str = "gemini-flash-latest"  # alias : suit le modèle Flash courant
     groq_model: str = "openai/gpt-oss-120b"
     openrouter_model: str = "openai/gpt-oss-120b:free"
     groq_whisper_model: str = "whisper-large-v3-turbo"
@@ -44,6 +44,7 @@ class Settings(BaseSettings):
     clip_max_s: int = 60
     max_clips_per_video: int = 6
     min_clip_score: int = 60
+    content_language: str = "français"  # langue des accroches, titres et descriptions
     layout: str = "blur_fit"  # blur_fit | crop
     out_width: int = 1080
     out_height: int = 1920
