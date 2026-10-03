@@ -13,8 +13,9 @@ from clipforge.pipeline.transcribe import Word, group_sentences
 
 log = logging.getLogger(__name__)
 
-WINDOW_S = 25 * 60
-OVERLAP_S = 2 * 60
+# Fenêtres de ~10 min : une requête reste sous la limite de l'offre gratuite Groq (8 000 tokens/min)
+WINDOW_S = 10 * 60
+OVERLAP_S = 60
 
 SYSTEM = """Tu es un monteur expert de contenus courts viraux pour TikTok.
 À partir d'une transcription horodatée, tu repères les moments qui fonctionnent seuls, hors contexte :
