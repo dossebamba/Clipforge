@@ -25,7 +25,17 @@ def env(tmp_path):
                    status=V_FAILED, error="boom")  # fmt: skip
         s.add_all([v1, v2])
     app = create_app(settings, factory, background=False)
-    return TestClient(app), factory
+    client = TestClient(app)
+    r = client.post(
+        "/register",
+        data={
+            "email": "moi@example.com",
+            "password": "mot-de-passe-solide",
+            "confirm": "mot-de-passe-solide",
+        },
+    )
+    assert r.status_code == 200  # inscription puis connexion automatique (redirection suivie)
+    return client, factory
 
 
 def _ids(factory):

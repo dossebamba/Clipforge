@@ -42,3 +42,20 @@ pytest
 ## Secrets
 
 Les clés vivent uniquement dans `.env` (ignoré par git). Modèle : `.env.example`.
+
+## Connexion
+
+Le dashboard est protégé par un compte. Au premier lancement, ouvre http://127.0.0.1:8000 :
+tu es redirigé vers la page d'inscription, et ce premier compte devient le propriétaire.
+Les inscriptions se ferment ensuite (réglable avec `ALLOW_REGISTRATION=true` dans `.env`).
+
+Mot de passe oublié (il n'y a pas d'e-mail de récupération) :
+
+```powershell
+.\.venv\Scripts\python.exe -m clipforge.cli reset-password ton@email.com
+```
+
+Sécurité : mots de passe hachés (scrypt), sessions côté serveur révocables, cookie HttpOnly,
+limitation des tentatives de connexion, contrôle d'origine anti-CSRF, clips servis uniquement aux
+utilisateurs connectés. Si tu exposes Clipforge sur Internet, place-le derrière HTTPS
+(et mets `SECURE_COOKIES=true`).

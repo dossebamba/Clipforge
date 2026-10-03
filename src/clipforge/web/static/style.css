@@ -68,3 +68,15 @@ th { color: var(--muted); font-weight: 500; font-size: 13px; }
 .err { color: var(--bad); font-size: 13px; }
 .back { color: var(--muted); display: inline-block; margin-bottom: 12px; }
 @media (max-width: 760px) { .form-grid { grid-template-columns: 1fr; } .stats { margin-left: 0; } }
+
+.who { display: flex; gap: 10px; align-items: center; }
+.auth-page { display: flex; min-height: 100vh; align-items: center; justify-content: center; padding: 20px; }
+.auth-card { width: 100%; max-width: 400px; background: var(--panel); border: 1px solid var(--line);
+  border-radius: 16px; padding: 28px; }
+.auth-card .brand { display: block; margin-bottom: 18px; }
+.auth-form { display: flex; flex-direction: column; gap: 14px; margin-top: 8px; }
+.auth-form button { padding: 10px; }
+.auth-error { background: rgba(255,92,92,.12); border: 1px solid rgba(255,92,92,.45); color: var(--bad);
+  border-radius: 8px; padding: 9px 12px; margin-bottom: 8px; font-size: 14px; }
+.auth-alt { color: var(--muted); text-align: center; margin: 18px 0 0; font-size: 14px; }
+.auth-alt a { color: var(--accent2); text-decoration: underline; }

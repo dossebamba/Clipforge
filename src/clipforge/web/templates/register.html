@@ -1,0 +1,20 @@
+{% extends "auth_base.html" %}
+{% block title %}Inscription · Clipforge{% endblock %}
+{% block content %}
+<h1>Créer un compte</h1>
+<p class="sub">
+  {% if first %}Premier lancement : ce compte sera le propriétaire de Clipforge. Les inscriptions se fermeront ensuite.
+  {% else %}Crée ton accès au dashboard.{% endif %}
+</p>
+{% if error %}<div class="auth-error" role="alert">{{ error }}</div>{% endif %}
+<form method="post" action="/register" class="auth-form">
+  <label><small>E-mail</small>
+    <input type="email" name="email" value="{{ email }}" required autocomplete="username" autofocus></label>
+  <label><small>Mot de passe ({{ min_len }} caractères minimum)</small>
+    <input type="password" name="password" required minlength="{{ min_len }}" maxlength="128" autocomplete="new-password"></label>
+  <label><small>Confirmer le mot de passe</small>
+    <input type="password" name="confirm" required minlength="{{ min_len }}" maxlength="128" autocomplete="new-password"></label>
+  <button class="primary">Créer mon compte</button>
+</form>
+{% if not first %}<p class="auth-alt">Déjà un compte ? <a href="/login">Se connecter</a></p>{% endif %}
+{% endblock %}

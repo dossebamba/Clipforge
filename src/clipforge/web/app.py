@@ -8,9 +8,10 @@ from collections.abc import Iterator
 from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
+from urllib.parse import quote, urlparse
 
-from fastapi import Depends, FastAPI, Form, HTTPException, Request
-from fastapi.responses import FileResponse, RedirectResponse
+from fastapi import APIRouter, Depends, FastAPI, Form, HTTPException, Request
+from fastapi.responses import FileResponse, PlainTextResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import func, select
@@ -28,6 +29,7 @@ from clipforge.db.models import (
     V_SKIPPED,
     Clip,
     Source,
+    User,
     Video,
     utcnow,
 )
@@ -35,9 +37,15 @@ from clipforge.db.session import make_engine, make_session_factory
 from clipforge.llm.router import LLMRouter
 from clipforge.pipeline.orchestrator import Worker
 from clipforge.sources import service
+from clipforge.web import auth
 
 log = logging.getLogger(__name__)
 HERE = Path(__file__).parent
+
+
+class NotAuthenticated(Exception):
+    """Levée quand une page protégée est demandée sans session valide."""
+
 
 STAGE_LABELS = {
     "download": "Téléchargement",
@@ -100,7 +108,6 @@ def create_app(
     templates = Jinja2Templates(directory=str(HERE / "templates"))
     templates.env.filters["dur"] = duration_label
     templates.env.filters["stage"] = stage_label
-    app.mount("/media", StaticFiles(directory=str(settings.clips_dir)), name="media")
     app.mount("/static", StaticFiles(directory=str(HERE / "static")), name="static")
 
     def get_db() -> Iterator[Session]:
@@ -114,11 +121,22 @@ def create_app(
         finally:
             session.close()
 
+    def require_user(request: Request, db: Session = Depends(get_db)) -> User:
+        user = auth.user_from_token(db, request.cookies.get(auth.COOKIE_NAME))
+        if user is None:
+            raise NotAuthenticated
+        request.state.user = user
+        return user
+
+    # Toutes les pages et actions du dashboard passent par ce routeur : connexion obligatoire.
+    protected = APIRouter(dependencies=[Depends(require_user)])
+
     def back(request: Request, fallback: str = "/") -> RedirectResponse:
         return RedirectResponse(request.headers.get("referer") or fallback, status_code=303)
 
     def render(request: Request, name: str, **ctx):
-        return templates.TemplateResponse(request, name, {"now": utcnow(), **ctx})
+        user = getattr(request.state, "user", None)
+        return templates.TemplateResponse(request, name, {"now": utcnow(), "user": user, **ctx})
 
     def video_query():
         return select(Video).options(selectinload(Video.clips))
@@ -144,7 +162,7 @@ def create_app(
 
     # ---------- Pages ----------
 
-    @app.get("/")
+    @protected.get("/")
     def to_post(request: Request, channel: str = "", db: Session = Depends(get_db)):
         videos = list(db.scalars(video_query().order_by(Video.created_at.desc())))
         channels = sorted({v.origin for v in videos})
@@ -166,7 +184,7 @@ def create_app(
             tab="post",
         )
 
-    @app.get("/published")
+    @protected.get("/published")
     def published(request: Request, channel: str = "", db: Session = Depends(get_db)):
         videos = [
             v
@@ -186,19 +204,19 @@ def create_app(
             tab="published",
         )
 
-    @app.get("/video/{video_id}")
+    @protected.get("/video/{video_id}")
     def video_page(video_id: int, request: Request, db: Session = Depends(get_db)):
         video = db.scalar(video_query().where(Video.id == video_id))
         if not video:
             raise HTTPException(404)
         return render(request, "video.html", video=video, stats=stats(db), tab="")
 
-    @app.get("/sources")
+    @protected.get("/sources")
     def sources_page(request: Request, db: Session = Depends(get_db)):
         sources = list(db.scalars(select(Source).order_by(Source.created_at.desc())))
         return render(request, "sources.html", sources=sources, stats=stats(db), tab="sources")
 
-    @app.get("/activity")
+    @protected.get("/activity")
     def activity(request: Request, db: Session = Depends(get_db)):
         def by_status(*statuses: str):
             return list(
@@ -230,29 +248,29 @@ def create_app(
             raise HTTPException(404)
         return clip
 
-    @app.post("/clips/{clip_id}/posted")
+    @protected.post("/clips/{clip_id}/posted")
     def mark_posted(clip_id: int, request: Request, db: Session = Depends(get_db)):
         clip = get_clip(db, clip_id)
         clip.status, clip.posted_at = C_POSTED, utcnow()
         return back(request)
 
-    @app.post("/clips/{clip_id}/unposted")
+    @protected.post("/clips/{clip_id}/unposted")
     def unmark_posted(clip_id: int, request: Request, db: Session = Depends(get_db)):
         clip = get_clip(db, clip_id)
         clip.status, clip.posted_at = C_READY, None
         return back(request)
 
-    @app.post("/clips/{clip_id}/reject")
+    @protected.post("/clips/{clip_id}/reject")
     def reject(clip_id: int, request: Request, db: Session = Depends(get_db)):
         get_clip(db, clip_id).status = C_REJECTED
         return back(request)
 
-    @app.post("/clips/{clip_id}/restore")
+    @protected.post("/clips/{clip_id}/restore")
     def restore(clip_id: int, request: Request, db: Session = Depends(get_db)):
         get_clip(db, clip_id).status = C_READY
         return back(request)
 
-    @app.post("/clips/{clip_id}/edit")
+    @protected.post("/clips/{clip_id}/edit")
     def edit(
         clip_id: int,
         request: Request,
@@ -265,7 +283,7 @@ def create_app(
         clip.tiktok_url = tiktok_url.strip()
         return back(request)
 
-    @app.get("/clips/{clip_id}/download")
+    @protected.get("/clips/{clip_id}/download")
     def download(clip_id: int, db: Session = Depends(get_db)):
         clip = get_clip(db, clip_id)
         path = settings.clips_dir / clip.file_path
@@ -278,7 +296,7 @@ def create_app(
 
     # ---------- Actions sur les vidéos ----------
 
-    @app.post("/videos/{video_id}/retry")
+    @protected.post("/videos/{video_id}/retry")
     def retry(video_id: int, request: Request, db: Session = Depends(get_db)):
         video = db.get(Video, video_id)
         if not video:
@@ -289,7 +307,7 @@ def create_app(
         shutil.rmtree(settings.clips_dir / str(video_id), ignore_errors=True)
         return back(request, "/activity")
 
-    @app.post("/videos/{video_id}/delete")
+    @protected.post("/videos/{video_id}/delete")
     def delete_video(video_id: int, db: Session = Depends(get_db)):
         video = db.get(Video, video_id)
         if video:
@@ -299,7 +317,7 @@ def create_app(
 
     # ---------- Sources ----------
 
-    @app.post("/sources")
+    @protected.post("/sources")
     def add_source(
         request: Request,
         platform: str = Form(...),
@@ -320,7 +338,7 @@ def create_app(
         )
         return RedirectResponse("/sources", status_code=303)
 
-    @app.post("/sources/manual")
+    @protected.post("/sources/manual")
     def add_manual(request: Request, urls: str = Form(...), db: Session = Depends(get_db)):
         for url in [u.strip() for u in urls.splitlines() if u.strip()]:
             try:
@@ -331,14 +349,14 @@ def create_app(
                 log.warning("Lien manuel refusé (%s) : %s", url, e)
         return RedirectResponse("/activity", status_code=303)
 
-    @app.post("/sources/{source_id}/toggle")
+    @protected.post("/sources/{source_id}/toggle")
     def toggle_source(source_id: int, request: Request, db: Session = Depends(get_db)):
         src = db.get(Source, source_id)
         if src:
             src.enabled = not src.enabled
         return back(request, "/sources")
 
-    @app.post("/sources/{source_id}/delete")
+    @protected.post("/sources/{source_id}/delete")
     def delete_source(source_id: int, db: Session = Depends(get_db)):
         src = db.get(Source, source_id)
         if src:
@@ -347,10 +365,169 @@ def create_app(
             db.delete(src)
         return RedirectResponse("/sources", status_code=303)
 
-    @app.post("/poll")
+    @protected.post("/poll")
     def poll_now(request: Request, db: Session = Depends(get_db)):
         service.poll_all(db, settings)
         return back(request, "/sources")
+
+    @protected.get("/media/{path:path}")
+    def media(path: str):
+        """Sert les clips et miniatures, uniquement aux utilisateurs connectés."""
+        root = settings.clips_dir.resolve()
+        full = (root / path).resolve()
+        if not full.is_relative_to(root) or not full.is_file():
+            raise HTTPException(404)
+        return FileResponse(full)
+
+    app.include_router(protected)
+
+    # ---------- Connexion / inscription ----------
+
+    login_limiter = auth.RateLimiter(max_failures=5, window_s=600)
+    register_limiter = auth.RateLimiter(max_failures=10, window_s=3600)
+
+    def client_key(request: Request) -> str:
+        return request.client.host if request.client else "inconnu"
+
+    def render_auth(request: Request, name: str, status: int = 200, **ctx):
+        resp = templates.TemplateResponse(request, name, ctx, status_code=status)
+        resp.headers["Cache-Control"] = "no-store"
+        return resp
+
+    def login_response(target: str, token: str) -> RedirectResponse:
+        resp = RedirectResponse(auth.safe_next(target), status_code=303)
+        resp.set_cookie(
+            auth.COOKIE_NAME,
+            token,
+            max_age=settings.session_days * 86400,
+            httponly=True,
+            samesite="lax",
+            secure=settings.secure_cookies,
+            path="/",
+        )
+        return resp
+
+    @app.get("/login")
+    def login_page(request: Request, next: str = "/", db: Session = Depends(get_db)):
+        if auth.user_from_token(db, request.cookies.get(auth.COOKIE_NAME)):
+            return RedirectResponse(auth.safe_next(next), status_code=303)
+        if auth.user_count(db) == 0:
+            return RedirectResponse("/register", status_code=303)
+        return render_auth(
+            request,
+            "login.html",
+            next=auth.safe_next(next),
+            error=None,
+            email="",
+            can_register=auth.registration_open(db, settings),
+        )
+
+    @app.post("/login")
+    def login(
+        request: Request,
+        email: str = Form(""),
+        password: str = Form(""),
+        next: str = Form("/"),
+        db: Session = Depends(get_db),
+    ):
+        key = client_key(request)
+        email = auth.normalize_email(email)
+        ctx = {
+            "next": auth.safe_next(next),
+            "email": email,
+            "can_register": auth.registration_open(db, settings),
+        }
+        if login_limiter.blocked(key):
+            msg = "Trop de tentatives. Réessayez dans quelques minutes."
+            return render_auth(request, "login.html", 429, error=msg, **ctx)
+        user = auth.authenticate(db, email, password)
+        if user is None:
+            login_limiter.fail(key)
+            return render_auth(request, "login.html", 401, error=auth.BAD_CREDENTIALS, **ctx)
+        login_limiter.reset(key)
+        return login_response(next, auth.start_session(db, user, settings))
+
+    @app.get("/register")
+    def register_page(request: Request, db: Session = Depends(get_db)):
+        if auth.user_from_token(db, request.cookies.get(auth.COOKIE_NAME)):
+            return RedirectResponse("/", status_code=303)
+        if not auth.registration_open(db, settings):
+            return render_auth(request, "register_closed.html", 403)
+        return render_auth(
+            request,
+            "register.html",
+            error=None,
+            email="",
+            first=auth.user_count(db) == 0,
+            min_len=settings.min_password_length,
+        )
+
+    @app.post("/register")
+    def register(
+        request: Request,
+        email: str = Form(""),
+        password: str = Form(""),
+        confirm: str = Form(""),
+        db: Session = Depends(get_db),
+    ):
+        if not auth.registration_open(db, settings):
+            return render_auth(request, "register_closed.html", 403)
+        key = "reg:" + client_key(request)
+        email = auth.normalize_email(email)
+        ctx = {
+            "email": email,
+            "first": auth.user_count(db) == 0,
+            "min_len": settings.min_password_length,
+        }
+        if register_limiter.blocked(key):
+            return render_auth(
+                request,
+                "register.html",
+                429,
+                error="Trop de tentatives. Réessayez plus tard.",
+                **ctx,
+            )
+        register_limiter.fail(key)  # chaque tentative compte
+        error = auth.validate_registration(email, password, confirm, settings)
+        user = None if error else auth.create_user(db, email, password, settings)
+        if error is None and user is None:
+            error = "Impossible de créer ce compte."
+        if error or user is None:
+            return render_auth(request, "register.html", 400, error=error, **ctx)
+        return login_response("/", auth.start_session(db, user, settings))
+
+    @app.post("/logout")
+    def logout(request: Request, db: Session = Depends(get_db)):
+        auth.end_session(db, request.cookies.get(auth.COOKIE_NAME))
+        resp = RedirectResponse("/login", status_code=303)
+        resp.delete_cookie(auth.COOKIE_NAME, path="/")
+        return resp
+
+    # ---------- Sécurité transversale ----------
+
+    @app.exception_handler(NotAuthenticated)
+    async def _redirect_to_login(request: Request, _exc: NotAuthenticated):
+        with factory() as s:
+            no_user = auth.user_count(s) == 0
+        if no_user:
+            return RedirectResponse("/register", status_code=303)
+        if request.method == "GET":
+            target = request.url.path + (f"?{request.url.query}" if request.url.query else "")
+            return RedirectResponse(f"/login?next={quote(target, safe='')}", status_code=303)
+        return RedirectResponse("/login", status_code=303)
+
+    @app.middleware("http")
+    async def security_middleware(request: Request, call_next):
+        # Refuse les requêtes qui modifient des données si elles viennent d'un autre site (CSRF)
+        if request.method in ("POST", "PUT", "PATCH", "DELETE"):
+            origin = request.headers.get("origin")
+            if origin and urlparse(origin).netloc != request.headers.get("host"):
+                return PlainTextResponse("Origine refusée", status_code=403)
+        response = await call_next(request)
+        response.headers.setdefault("X-Content-Type-Options", "nosniff")
+        response.headers.setdefault("X-Frame-Options", "DENY")
+        response.headers.setdefault("Referrer-Policy", "same-origin")
+        return response
 
     return app
 

@@ -28,6 +28,12 @@ class Settings(BaseSettings):
     groq_whisper_model: str = "whisper-large-v3-turbo"
     local_whisper_model: str = "small"
 
+    # Authentification
+    allow_registration: bool = False  # True : inscriptions ouvertes même après le 1er compte
+    secure_cookies: bool = False  # à mettre à True derrière HTTPS
+    session_days: int = 14
+    min_password_length: int = 10
+
     # Stockage
     data_dir: Path = ROOT / "data"
 

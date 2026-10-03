@@ -21,6 +21,12 @@
       <span>Total postés <b>{{ stats.posted }}</b></span>
       <span>En file <b>{{ stats.queue }}</b></span>
     </div>
+    {% if user %}
+    <form method="post" action="/logout" class="who">
+      <span class="meta">{{ user.email }}</span>
+      <button>Déconnexion</button>
+    </form>
+    {% endif %}
   </div>
 </header>
 <main>{% block content %}{% endblock %}</main>
