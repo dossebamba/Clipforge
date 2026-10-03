@@ -2,13 +2,17 @@
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 import yt_dlp
 
 from clipforge.config import Settings
 from clipforge.pipeline.media import ffmpeg_path
+
+log = logging.getLogger(__name__)
 
 
 @dataclass
@@ -18,27 +22,53 @@ class Downloaded:
     duration_s: float
 
 
-def download(url: str, dest: Path, settings: Settings, want_subs: bool) -> Downloaded:
-    dest.mkdir(parents=True, exist_ok=True)
-    h = settings.max_video_height
-    opts = {
+def _base_opts(dest: Path) -> dict[str, Any]:
+    return {
         "quiet": True,
         "no_warnings": True,
         "noplaylist": True,
-        "format": f"bv*[height<={h}]+ba/b[height<={h}]/b",
-        "merge_output_format": "mp4",
         "outtmpl": str(dest / "source.%(ext)s"),
         "ffmpeg_location": str(Path(ffmpeg_path()).parent),
         "retries": 5,
         "fragment_retries": 5,
     }
-    if want_subs:
-        opts.update(
-            writeautomaticsub=True,
-            writesubtitles=True,
-            subtitleslangs=["fr", "fr-orig", "en", "en-orig"],
-            subtitlesformat="json3",
-        )
+
+
+def _subtitle_langs(info: dict[str, Any]) -> list[str]:
+    """Une seule langue demandée (celle de la vidéo) pour limiter les requêtes et les erreurs 429."""
+    lang = (info.get("language") or "").split("-")[0]
+    return [lang] if lang else ["en", "fr"]
+
+
+def fetch_subtitles(url: str, dest: Path, info: dict[str, Any]) -> Path | None:
+    """Télécharge les sous-titres auto. Facultatif : toute erreur (ex. 429) donne None,
+    et la transcription se fera alors avec Whisper."""
+    opts = _base_opts(dest) | {
+        "skip_download": True,
+        "writeautomaticsub": True,
+        "writesubtitles": True,
+        "subtitleslangs": _subtitle_langs(info),
+        "subtitlesformat": "json3",
+        "sleep_interval_subtitles": 1,
+        "retries": 1,
+    }
+    try:
+        with yt_dlp.YoutubeDL(opts) as ydl:
+            ydl.download([url])
+    except Exception as e:
+        log.warning("Sous-titres indisponibles (%s), repli sur Whisper", type(e).__name__)
+        return None
+    subs = sorted(dest.glob("source.*.json3"))
+    return subs[0] if subs else None
+
+
+def download(url: str, dest: Path, settings: Settings, want_subs: bool) -> Downloaded:
+    dest.mkdir(parents=True, exist_ok=True)
+    h = settings.max_video_height
+    opts = _base_opts(dest) | {
+        "format": f"bv*[height<={h}]+ba/b[height<={h}]/b",
+        "merge_output_format": "mp4",
+    }
     with yt_dlp.YoutubeDL(opts) as ydl:
         info = ydl.extract_info(url, download=True)
 
@@ -46,5 +76,5 @@ def download(url: str, dest: Path, settings: Settings, want_subs: bool) -> Downl
     if not candidates:
         raise RuntimeError("Téléchargement : fichier vidéo introuvable")
     video = next((p for p in candidates if p.suffix == ".mp4"), candidates[0])
-    subs = sorted(dest.glob("source.*.json3"))
-    return Downloaded(video, subs[0] if subs else None, float(info.get("duration") or 0))
+    subs = fetch_subtitles(url, dest, info) if want_subs else None
+    return Downloaded(video, subs, float(info.get("duration") or 0))
