@@ -12,7 +12,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from clipforge.config import Settings, get_settings
-from clipforge.db.models import V_PENDING, V_SEEN, V_SKIPPED, Source, Video, utcnow
+from clipforge.db.models import V_PENDING, V_SEEN, V_SKIPPED, Profile, Source, Video, utcnow
 from clipforge.sources import manual, twitch, youtube
 from clipforge.sources.base import RemoteVideo
 
@@ -59,6 +59,7 @@ def add_source(
     )
     if existing:
         return existing
+    options.setdefault("profile_id", default_profile_id(session))
     source = Source(platform=platform, identifier=identifier, **options)
     session.add(source)
     session.flush()
@@ -94,6 +95,7 @@ def poll_source(session: Session, source: Source, settings: Settings | None = No
         session.add(
             Video(
                 source_id=source.id,
+                profile_id=source.profile_id,
                 platform=v.platform,
                 external_id=v.external_id,
                 url=v.url,
@@ -117,13 +119,18 @@ def poll_all(session: Session, settings: Settings | None = None) -> int:
     return total
 
 
-def add_manual_url(session: Session, url: str) -> Video:
+def default_profile_id(session: Session) -> int | None:
+    return session.scalar(select(Profile.id).order_by(Profile.id).limit(1))
+
+
+def add_manual_url(session: Session, url: str, profile_id: int | None = None) -> Video:
     remote = manual.resolve_url(url)
     existing = session.scalar(select(Video).where(Video.external_id == remote.external_id))
     if existing:
         return existing
     video = Video(
         source_id=None,
+        profile_id=profile_id or default_profile_id(session),
         platform=remote.platform,
         external_id=remote.external_id,
         url=remote.url,

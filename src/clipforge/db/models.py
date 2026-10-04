@@ -53,6 +53,31 @@ class AuthSession(Base):
     user: Mapped[User] = relationship()
 
 
+DEFAULT_PROFILE_NAME = "Général"
+
+
+class Profile(Base):
+    """Un compte TikTok / un thème. Chaque chaîne et chaque vidéo appartient à un seul profil,
+    donc un clip n'est destiné qu'à un seul compte."""
+
+    __tablename__ = "profiles"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(40), unique=True)
+    niche: Mapped[str] = mapped_column(String(200), default="")  # ex. « automobile, tuning »
+    language: Mapped[str] = mapped_column(String(40), default="français")
+    base_hashtags: Mapped[str] = mapped_column(String(200), default="")  # toujours ajoutés
+    style: Mapped[str] = mapped_column(String(500), default="")  # consignes de ton pour l'IA
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+    sources: Mapped[list[Source]] = relationship(back_populates="profile")
+    videos: Mapped[list[Video]] = relationship(back_populates="profile")
+
+    @property
+    def hashtag_list(self) -> list[str]:
+        return [t for t in self.base_hashtags.split() if t.startswith("#")]
+
+
 class Source(Base):
     __tablename__ = "sources"
 
@@ -68,7 +93,9 @@ class Source(Base):
     last_checked: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     last_error: Mapped[str] = mapped_column(Text, default="")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    profile_id: Mapped[int | None] = mapped_column(ForeignKey("profiles.id"), nullable=True)
 
+    profile: Mapped[Profile | None] = relationship(back_populates="sources")
     videos: Mapped[list[Video]] = relationship(back_populates="source")
 
     @property
@@ -81,6 +108,7 @@ class Video(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     source_id: Mapped[int | None] = mapped_column(ForeignKey("sources.id"), nullable=True)
+    profile_id: Mapped[int | None] = mapped_column(ForeignKey("profiles.id"), nullable=True)
     platform: Mapped[str] = mapped_column(String(16))
     external_id: Mapped[str] = mapped_column(String(64), unique=True)
     url: Mapped[str] = mapped_column(String(500))
@@ -96,6 +124,7 @@ class Video(Base):
     processed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     source: Mapped[Source | None] = relationship(back_populates="videos")
+    profile: Mapped[Profile | None] = relationship(back_populates="videos")
     clips: Mapped[list[Clip]] = relationship(
         back_populates="video", cascade="all, delete-orphan", order_by="Clip.start_s"
     )
