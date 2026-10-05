@@ -43,7 +43,6 @@ def test_teaser_adds_exactly_its_duration_and_keeps_audio(source, tmp_path):
     t = Transform(
         teaser=(10.0, 14.0),
         callouts=[(8.0, "Regarde ça")],
-        credit="Source : Chaîne",
         brand="@moncompte",
     )
     render_clip(source, out, 2.0, 17.0, WORDS, "Accroche", Settings(), tmp_path / "w", transform=t)
@@ -55,7 +54,7 @@ def test_teaser_adds_exactly_its_duration_and_keeps_audio(source, tmp_path):
 
 def test_overlays_without_teaser_keep_original_duration(source, tmp_path):
     out = tmp_path / "o.mp4"
-    t = Transform(callouts=[(8.0, "Info")], credit="Source : X", brand="@moi")
+    t = Transform(callouts=[(8.0, "Info")], brand="@moi")
     render_clip(source, out, 2.0, 12.0, WORDS, "Accroche", Settings(), tmp_path / "w", transform=t)
     assert duration(out) == pytest.approx(10.0, abs=0.3)
 

@@ -74,7 +74,6 @@ class Profile(Base):
     layout: Mapped[str] = mapped_column(String(16), default="blur_fit", server_default="blur_fit")
     teaser: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
     callouts: Mapped[bool] = mapped_column(Boolean, default=True, server_default="1")
-    credit: Mapped[bool] = mapped_column(Boolean, default=True, server_default="1")
     brand_text: Mapped[str] = mapped_column(String(40), default="", server_default="")
 
     sources: Mapped[list[Source]] = relationship(back_populates="profile")

@@ -59,7 +59,6 @@ def process_video(
             layout=p.layout if p else "",
             callouts=p.callouts if p else False,
             teaser=p.teaser if p else False,
-            credit=p.credit if p else False,
             brand_text=p.brand_text if p else "",
         )
 
@@ -91,7 +90,6 @@ def process_video(
             transform = render.Transform(
                 callouts=c.callouts,
                 teaser=c.teaser,
-                credit=f"Source : {channel}" if style.credit and channel else "",
                 brand=style.brand_text,
             )
             render.render_clip(

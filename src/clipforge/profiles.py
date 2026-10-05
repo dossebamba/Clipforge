@@ -62,7 +62,6 @@ def _clean_options(
     layout: str | None,
     teaser: bool | None,
     callouts: bool | None,
-    credit: bool | None,
     brand_text: str | None,
 ) -> dict[str, Any]:
     """Valide les options de transformation ; les valeurs None sont laissées inchangées."""
@@ -71,7 +70,7 @@ def _clean_options(
         if layout not in LAYOUTS:
             raise ProfileError("Cadrage inconnu.")
         out["layout"] = layout
-    for key, value in (("teaser", teaser), ("callouts", callouts), ("credit", credit)):
+    for key, value in (("teaser", teaser), ("callouts", callouts)):
         if value is not None:
             out[key] = bool(value)
     if brand_text is not None:
@@ -100,11 +99,10 @@ def create_profile(
     layout: str = "blur_fit",
     teaser: bool = False,
     callouts: bool = True,
-    credit: bool = True,
     brand_text: str = "",
 ) -> Profile:
     fields = _clean(name, niche, language, base_hashtags, style)
-    fields |= _clean_options(layout, teaser, callouts, credit, brand_text)
+    fields |= _clean_options(layout, teaser, callouts, brand_text)
     if _name_taken(db, fields["name"]):
         raise ProfileError("Un profil porte déjà ce nom.")
     profile = Profile(**fields)
@@ -125,11 +123,10 @@ def update_profile(
     layout: str | None = None,
     teaser: bool | None = None,
     callouts: bool | None = None,
-    credit: bool | None = None,
     brand_text: str | None = None,
 ) -> Profile:
     fields = _clean(name, niche, language, base_hashtags, style)
-    fields |= _clean_options(layout, teaser, callouts, credit, brand_text)
+    fields |= _clean_options(layout, teaser, callouts, brand_text)
     if _name_taken(db, fields["name"], except_id=profile.id):
         raise ProfileError("Un profil porte déjà ce nom.")
     for key, value in fields.items():

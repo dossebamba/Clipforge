@@ -39,7 +39,6 @@ ADDED_COLUMNS = [
     ("profiles", "layout", "VARCHAR(16) NOT NULL DEFAULT 'blur_fit'"),
     ("profiles", "teaser", "BOOLEAN NOT NULL DEFAULT 0"),
     ("profiles", "callouts", "BOOLEAN NOT NULL DEFAULT 1"),
-    ("profiles", "credit", "BOOLEAN NOT NULL DEFAULT 1"),
     ("profiles", "brand_text", "VARCHAR(40) NOT NULL DEFAULT ''"),
 ]
 

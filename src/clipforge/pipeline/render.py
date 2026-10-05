@@ -26,7 +26,6 @@ Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour,
 Style: Sub,{font},{sub_size},{white},{white},{black},&H64000000,-1,0,0,0,100,100,0,0,1,{outline},3,2,60,60,{sub_margin},1
 Style: Hook,{font},{hook_size},{black},{black},{white},&H00000000,-1,0,0,0,100,100,0,0,3,26,0,8,70,70,{hook_margin},1
 Style: Callout,{font},{callout_size},{black},{black},{yellow},&H00000000,-1,0,0,0,100,100,0,0,3,22,0,8,70,70,{callout_margin},1
-Style: Credit,{font},{small_size},{white},{white},{black},&H00000000,-1,0,0,0,100,100,0,0,1,4,0,7,50,50,{small_margin},1
 Style: Brand,{font},{small_size},{white},{white},{black},&H00000000,-1,0,0,0,100,100,0,0,1,4,0,9,50,50,{small_margin},1
 
 [Events]
@@ -47,7 +46,6 @@ class Transform:
 
     callouts: list[tuple[float, str]] = field(default_factory=list)  # (instant absolu, texte)
     teaser: tuple[float, float] | None = None  # passage (absolu) rejoué en ouverture
-    credit: str = ""  # ex. « Source : GMK »
     brand: str = ""  # pseudo du compte, ex. « @moncompte »
 
     @property
@@ -151,8 +149,6 @@ def build_ass(
             f"Dialogue: 1,{ass_time(0)},{ass_time(end)},Hook,,0,0,0,,"
             f"{{\\fad(150,200)}}{_esc(hook).upper()}"
         )
-    if t.credit.strip():
-        lines.append(f"Dialogue: 1,{ass_time(0)},{ass_time(total)},Credit,,0,0,0,,{_esc(t.credit)}")
     if t.brand.strip():
         lines.append(f"Dialogue: 1,{ass_time(0)},{ass_time(total)},Brand,,0,0,0,,{_esc(t.brand)}")
     for at, text in t.callouts:

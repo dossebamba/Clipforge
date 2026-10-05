@@ -16,8 +16,7 @@
     <span><b>Bande-annonce d'ouverture</b><br><small>Le passage le plus fort est rejoué 3 à 6 s au début, puis le clip se déroule.</small></span></label>
   <label class="check"><input type="checkbox" name="callouts" {{ 'checked' if not p or p.callouts }}>
     <span><b>Remarques à l'écran</b><br><small>1 à 2 courts commentaires écrits par l'IA (réaction, contexte).</small></span></label>
-  <label class="check"><input type="checkbox" name="credit" {{ 'checked' if not p or p.credit }}>
-    <span><b>Crédit du créateur</b><br><small>« Source : nom de la chaîne » affiché en haut à gauche.</small></span></label>
+  <p class="meta" style="margin:0">Le crédit du créateur (« Source : nom de la chaîne ») est toujours ajouté à la <b>description</b> de chaque clip, jamais sur la vidéo.</p>
 </fieldset>
 {% endmacro %}
 

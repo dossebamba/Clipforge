@@ -82,7 +82,6 @@ class Style:
     layout: str = ""
     callouts: bool = False
     teaser: bool = False
-    credit: bool = False
     brand_text: str = ""
 
 

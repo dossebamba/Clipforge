@@ -77,9 +77,11 @@ Chaque profil règle donc des transformations, pour que le clip apporte quelque 
 |---|---|
 | Bande-annonce d'ouverture | Le passage le plus fort (2,5 à 7 s) est rejoué au tout début, puis le clip se déroule. |
 | Remarques à l'écran | 1 à 2 courts commentaires écrits par l'IA (réaction, contexte), jamais pendant l'accroche. |
-| Crédit du créateur | « Source : nom de la chaîne » en haut à gauche. |
 | Pseudo | Ton @compte en haut à droite. |
 | Cadrage | Vidéo entière sur fond flouté, ou plein écran recadré. |
+
+Le crédit du créateur (« Source : nom de la chaîne ») n'est pas affiché sur la vidéo : il est ajouté
+à la description de chaque clip.
 
 Les sorties de l'IA sont validées par le code (durées, positions, longueur des textes) avant d'être
 appliquées. Les changements d'un profil s'appliquent aux prochains clips, pas à ceux déjà montés.

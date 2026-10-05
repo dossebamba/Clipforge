@@ -182,12 +182,11 @@ def test_ass_overlays_and_teaser_offsets():
     t = Transform(
         teaser=(20.0, 23.0),
         callouts=[(16.0, "Info"), (12.0, "Tôt")],
-        credit="Source : GMK",
         brand="@moi",
     )
     ass = build_ass(words, 10.0, 30.0, "Accroche", S, t)
-    assert _events(ass, "Credit") and "Source : GMK" in _events(ass, "Credit")[0]
     assert "@moi" in _events(ass, "Brand")[0]
+    assert "Credit" not in ass  # le crédit du créateur n'est jamais écrit sur la vidéo
     # la remarque à 16 s (clip commence à 10 s) apparaît à 6 + 3 (bande-annonce) = 9 s ; celle de 12 s
     # tomberait pendant l'accroche (2 + 3 = 5 s > 3 s : OK) -> vérifions les horaires réels
     starts = sorted(e.split(",")[1] for e in _events(ass, "Callout"))
@@ -199,7 +198,7 @@ def test_ass_overlays_and_teaser_offsets():
     )  # 1re ligne = bande-annonce (mots à partir de 20 s)
     assert any(e.split(",")[1] == "0:00:03.00" for e in subs)  # début du clip proprement dit
     # la fin globale = bande-annonce + durée du clip
-    assert max(e.split(",")[2] for e in _events(ass, "Credit")) == "0:00:23.00"
+    assert max(e.split(",")[2] for e in _events(ass, "Brand")) == "0:00:23.00"
 
 
 def test_callout_during_hook_is_skipped():
@@ -209,7 +208,7 @@ def test_callout_during_hook_is_skipped():
 
 def test_no_transform_means_no_extra_events():
     ass = build_ass(_words(30), 0.0, 20.0, "H", S)
-    assert not _events(ass, "Callout") and not _events(ass, "Credit") and not _events(ass, "Brand")
+    assert not _events(ass, "Callout") and not _events(ass, "Brand")
 
 
 def test_filtergraph_with_teaser_builds_audio_and_video_concat():
@@ -238,7 +237,7 @@ def test_profile_options_validation_and_partial_update(factory):
     with session_scope(factory) as s:
         p = ps.create_profile(s, "A", brand_text="  @{mon}\\compte \n")
         assert p.brand_text == "@moncompte" and p.layout == "blur_fit"
-        assert p.callouts and p.credit and not p.teaser  # valeurs par défaut
+        assert p.callouts and not p.teaser  # valeurs par défaut
         with pytest.raises(ps.ProfileError, match="Cadrage"):
             ps.create_profile(s, "B", layout="zoom")
         with pytest.raises(ps.ProfileError, match="pseudo"):
@@ -268,9 +267,23 @@ def test_profiles_table_from_previous_version_gets_new_columns(tmp_path):
     with session_scope(f) as s:
         p = s.query(Profile).one()
         assert (p.name, p.base_hashtags) == ("Voiture", "#auto")  # données conservées
-        assert (p.layout, p.teaser, p.callouts, p.credit, p.brand_text) == (
-            "blur_fit", False, True, True, "",
-        )  # fmt: skip
+        assert (p.layout, p.teaser, p.callouts, p.brand_text) == ("blur_fit", False, True, "")
+
+
+def test_database_that_still_has_the_removed_credit_column_keeps_working(tmp_path):
+    """Une base créée par la version précédente garde sa colonne `credit` (NOT NULL, défaut 1) :
+    elle ne doit pas empêcher d'enregistrer ni de lire des profils."""
+    path = tmp_path / "prev.sqlite"
+    make_engine(path)
+    con = sqlite3.connect(path)
+    con.execute("ALTER TABLE profiles ADD COLUMN credit BOOLEAN NOT NULL DEFAULT 1")
+    con.commit()
+    con.close()
+    f = make_session_factory(make_engine(path))
+    with session_scope(f) as s:
+        ps.create_profile(s, "Nouveau", callouts=False)
+        s.flush()
+        assert {p.name for p in s.query(Profile)} == {"Général", "Nouveau"}
 
 
 # ---------- Interface ----------
@@ -289,27 +302,23 @@ def client(tmp_path):
 def test_profile_form_saves_checkboxes_and_layout(client):
     c, f = client
     r = c.post("/profiles", data={"name": "Divertissement", "layout": "crop", "teaser": "on",
-                                  "credit": "on", "brand_text": "@moi"})  # fmt: skip
+                                  "brand_text": "@moi"})  # fmt: skip
     assert r.status_code == 303
     with session_scope(f) as s:
         p = s.query(Profile).filter_by(name="Divertissement").one()
-        assert (p.layout, p.teaser, p.callouts, p.credit, p.brand_text) == (
-            "crop",
-            True,
-            False,
-            True,
-            "@moi",
-        )
+        assert (p.layout, p.teaser, p.callouts, p.brand_text) == ("crop", True, False, "@moi")
         pid = p.id
     c.post(
         f"/profiles/{pid}", data={"name": "Divertissement", "callouts": "on"}
     )  # tout le reste décoché
     with session_scope(f) as s:
         p = s.get(Profile, pid)
-        assert (p.teaser, p.callouts, p.credit) == (False, True, False)
+        assert (p.teaser, p.callouts) == (False, True)
     assert c.post("/profiles", data={"name": "X", "layout": "zoom"}).status_code == 400
     page = c.get("/profiles").text
     assert "Bande-annonce d'ouverture" in page and "Remarques à l'écran" in page
+    # plus d'option « crédit » sur la vidéo : il est expliqué comme faisant partie de la description
+    assert 'name="credit"' not in page and "description" in page
 
 
 # ---------- Orchestration ----------
@@ -320,7 +329,7 @@ def test_process_video_applies_profile_transformations(factory, tmp_path, monkey
     settings.ensure_dirs()
     with session_scope(factory) as s:
         p = ps.create_profile(
-            s, "Voiture", "auto", layout="crop", teaser=True, callouts=True, credit=True,
+            s, "Voiture", "auto", layout="crop", teaser=True, callouts=True,
             brand_text="@moncompte",
         )  # fmt: skip
         v = Video(platform="youtube", external_id="a", url="u", title="T", status=V_PENDING,
@@ -348,18 +357,21 @@ def test_process_video_applies_profile_transformations(factory, tmp_path, monkey
     assert orch.process_video(factory, vid, settings, router) == 1  # type: ignore[arg-type]
     t = seen["transform"]
     assert seen["layout"] == "crop"
-    assert t.credit == "Source : GMK" and t.brand == "@moncompte"
+    assert t.brand == "@moncompte"
     assert t.callouts == [(30.0, "Wow")] and t.teaser is not None
+    assert not hasattr(t, "credit")  # le crédit n'est jamais incrusté dans la vidéo
     assert '"teaser"' in router.prompts[0]
     with session_scope(factory) as s:
-        assert s.query(Clip).count() == 1
+        clip = s.query(Clip).one()
+        # il reste dans la description, rattaché au clip
+        assert "Source : GMK" in clip.description
 
 
 def test_process_video_without_options_applies_nothing(factory, tmp_path, monkeypatch):
     settings = Settings(data_dir=tmp_path / "data")
     settings.ensure_dirs()
     with session_scope(factory) as s:
-        p = ps.create_profile(s, "Brut", callouts=False, credit=False)
+        p = ps.create_profile(s, "Brut", callouts=False)
         v = Video(platform="youtube", external_id="a", url="u", title="T", status=V_PENDING,
                   channel_name="GMK", profile_id=p.id)  # fmt: skip
         s.add(v)
@@ -377,4 +389,8 @@ def test_process_video_without_options_applies_nothing(factory, tmp_path, monkey
                         lambda *a, **k: seen.update(t=a[9] if len(a) > 9 else k.get("transform")))  # fmt: skip
     orch.process_video(factory, vid, settings, Rec(PAYLOAD))  # type: ignore[arg-type]
     t = seen["t"]
-    assert t.credit == "" and t.brand == "" and t.callouts == [] and t.teaser is None
+    assert t.brand == "" and t.callouts == [] and t.teaser is None
+    with session_scope(
+        factory
+    ) as s:  # même sans aucune option, le crédit reste dans la description
+        assert "Source : GMK" in s.query(Clip).one().description

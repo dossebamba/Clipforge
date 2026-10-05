@@ -509,7 +509,6 @@ def create_app(
         layout: str = Form("blur_fit"),
         teaser: str | None = Form(None),
         callouts: str | None = Form(None),
-        credit: str | None = Form(None),
         brand_text: str = Form(""),
         db: Session = Depends(get_db),
     ):
@@ -524,7 +523,6 @@ def create_app(
                 layout=layout,
                 teaser=teaser is not None,  # case à cocher : absente du formulaire si décochée
                 callouts=callouts is not None,
-                credit=credit is not None,
                 brand_text=brand_text,
             )
         except profile_service.ProfileError as e:
@@ -560,7 +558,6 @@ def create_app(
         layout: str = Form("blur_fit"),
         teaser: str | None = Form(None),
         callouts: str | None = Form(None),
-        credit: str | None = Form(None),
         brand_text: str = Form(""),
         db: Session = Depends(get_db),
     ):
@@ -579,7 +576,6 @@ def create_app(
                 layout=layout,
                 teaser=teaser is not None,
                 callouts=callouts is not None,
-                credit=credit is not None,
                 brand_text=brand_text,
             )
             db.flush()
