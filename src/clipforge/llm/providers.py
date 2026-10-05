@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 import time
 from typing import Protocol
 
@@ -26,9 +27,25 @@ class Provider(Protocol):
 
 
 RETRY_STATUS = {429, 500, 502, 503, 504}  # surcharge ou quota par minute : ça passe en réessayant
+SERVER_RETRY_STATUS = {
+    500,
+    502,
+    503,
+    504,
+}  # sans 429 : un quota épuisé ne se règle pas en attendant
 MAX_ATTEMPTS = 3
-MAX_WAIT_S = 25
-MAX_OUTPUT_TOKENS = 3000  # plafonne la réponse : sinon Groq réserve une très grosse réponse
+MAX_WAIT_S = 62  # une limite « par minute » se libère en moins d'une minute
+MAX_OUTPUT_TOKENS = 2200  # plafonne la réponse : sinon Groq réserve une très grosse réponse
+RETRY_IN = re.compile(r"try again in (\d+(?:\.\d+)?)\s*(ms|s|m)\b", re.IGNORECASE)
+
+
+_DURATION = re.compile(r"(\d+(?:\.\d+)?)(ms|h|m|s)")
+_UNIT_S = {"ms": 0.001, "s": 1.0, "m": 60.0, "h": 3600.0}
+
+
+def parse_duration_s(text: str) -> float:
+    """'43.095s' -> 43.095 ; '7m12s' -> 432 ; '350ms' -> 0.35 ; '' -> 0."""
+    return sum(float(v) * _UNIT_S[u] for v, u in _DURATION.findall(text or ""))
 
 
 def _raise_for(resp: httpx.Response, name: str) -> None:
@@ -38,16 +55,27 @@ def _raise_for(resp: httpx.Response, name: str) -> None:
 
 
 def _wait_time(resp: httpx.Response | None, attempt: int) -> float:
-    """Délai avant un nouvel essai : Retry-After si fourni, sinon 3 s, 9 s..."""
+    """Délai avant un nouvel essai : Retry-After, sinon le délai écrit dans le message
+    (« Please try again in 8.2s »), sinon 3 s, 12 s..."""
     if resp is not None:
         try:
             return min(float(resp.headers["retry-after"]), MAX_WAIT_S)
         except (KeyError, ValueError):
             pass
+        if m := RETRY_IN.search(resp.text):
+            value, unit = float(m.group(1)), m.group(2).lower()
+            seconds = value / 1000 if unit == "ms" else value * 60 if unit == "m" else value
+            return min(seconds + 1.0, MAX_WAIT_S)
     return min(3.0 * attempt**2, MAX_WAIT_S)
 
 
-def _post(client: httpx.Client, url: str, name: str, **kwargs) -> httpx.Response:
+def _post(
+    client: httpx.Client,
+    url: str,
+    name: str,
+    retry_statuses: set[int] = RETRY_STATUS,
+    **kwargs,
+) -> httpx.Response:
     """POST avec nouvelles tentatives sur les erreurs temporaires (503, 429...)."""
     resp: httpx.Response | None = None
     for attempt in range(1, MAX_ATTEMPTS + 1):
@@ -58,7 +86,7 @@ def _post(client: httpx.Client, url: str, name: str, **kwargs) -> httpx.Response
                 raise LLMError(f"{name}: {type(e).__name__}") from e
             time.sleep(_wait_time(None, attempt))
             continue
-        if resp.status_code not in RETRY_STATUS or attempt == MAX_ATTEMPTS:
+        if resp.status_code not in retry_statuses or attempt == MAX_ATTEMPTS:
             return resp
         log.info("%s : HTTP %s, nouvel essai %d/%d", name, resp.status_code, attempt, MAX_ATTEMPTS)
         time.sleep(_wait_time(resp, attempt))
@@ -66,16 +94,28 @@ def _post(client: httpx.Client, url: str, name: str, **kwargs) -> httpx.Response
 
 
 class GeminiProvider:
+    """Essaie plusieurs modèles dans l'ordre : le quota gratuit est compté PAR MODÈLE, donc quand
+    le modèle principal est épuisé, un modèle « lite » prend le relais."""
+
     name = "gemini"
 
-    def __init__(self, api_key: str, model: str, client: httpx.Client | None = None):
-        self.api_key, self.model = api_key, model
+    def __init__(self, api_key: str, models: str | list[str], client: httpx.Client | None = None):
+        self.api_key = api_key
+        self.models = [models] if isinstance(models, str) else list(models)
         self.client = client or httpx.Client(timeout=120)
 
     def complete(self, system: str, prompt: str) -> str:
-        url = (
-            f"https://generativelanguage.googleapis.com/v1beta/models/{self.model}:generateContent"
-        )
+        errors: list[str] = []
+        for model in self.models:
+            try:
+                return self._complete_with(model, system, prompt)
+            except LLMError as e:
+                log.warning("Gemini (%s) en échec : %s", model, e)
+                errors.append(str(e))
+        raise LLMError(" | ".join(errors))
+
+    def _complete_with(self, model: str, system: str, prompt: str) -> str:
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
         body = {
             "systemInstruction": {"parts": [{"text": system}]},
             "contents": [{"role": "user", "parts": [{"text": prompt}]}],
@@ -86,9 +126,14 @@ class GeminiProvider:
             },
         }
         resp = _post(
-            self.client, url, self.name, json=body, headers={"x-goog-api-key": self.api_key}
+            self.client,
+            url,
+            f"gemini/{model}",
+            SERVER_RETRY_STATUS,
+            json=body,
+            headers={"x-goog-api-key": self.api_key},
         )
-        _raise_for(resp, self.name)
+        _raise_for(resp, f"gemini/{model}")
         try:
             parts = resp.json()["candidates"][0]["content"]["parts"]
             return "".join(p.get("text", "") for p in parts)
@@ -109,8 +154,34 @@ class OpenAICompatProvider:
     ):
         self.name, self.base_url, self.api_key, self.model = name, base_url, api_key, model
         self.client = client or httpx.Client(timeout=120)
+        # Limite « tokens par minute » telle que le fournisseur la décrit dans ses en-têtes
+        self._tokens_left: int | None = None
+        self._resets_at = 0.0
+
+    def _pace(self, system: str, prompt: str) -> None:
+        """Attend la remise à zéro de la limite par minute plutôt que d'envoyer une requête
+        qui sera refusée. Le fournisseur compte l'entrée PLUS le plafond de réponse réservé,
+        même si la réponse réelle est bien plus courte."""
+        if self._tokens_left is None:
+            return
+        needed = (len(system) + len(prompt)) // 3 + MAX_OUTPUT_TOKENS  # estimation prudente
+        now = time.monotonic()
+        if needed > self._tokens_left and now < self._resets_at:
+            wait = min(self._resets_at - now, MAX_WAIT_S) + 0.5
+            log.info("%s : pause de %.0f s (limite de tokens par minute)", self.name, wait)
+            time.sleep(wait)
+        self._tokens_left = None  # les chiffres sont périmés : la réponse suivante les remplace
+
+    def _learn(self, resp: httpx.Response) -> None:
+        try:
+            self._tokens_left = int(resp.headers["x-ratelimit-remaining-tokens"])
+        except (KeyError, ValueError):
+            return
+        reset = parse_duration_s(resp.headers.get("x-ratelimit-reset-tokens", ""))
+        self._resets_at = time.monotonic() + reset
 
     def complete(self, system: str, prompt: str) -> str:
+        self._pace(system, prompt)
         body = {
             "model": self.model,
             "messages": [
@@ -130,6 +201,7 @@ class OpenAICompatProvider:
             json=body,
             headers={"Authorization": f"Bearer {self.api_key}"},
         )
+        self._learn(resp)
         _raise_for(resp, self.name)
         try:
             return resp.json()["choices"][0]["message"]["content"] or ""
@@ -142,7 +214,8 @@ def build_providers(settings: Settings) -> list[Provider]:
     out: list[Provider] = []
     for name in settings.provider_order:
         if name == "gemini" and settings.gemini_api_key:
-            out.append(GeminiProvider(settings.gemini_api_key, settings.gemini_model))
+            models = [m.strip() for m in settings.gemini_model.split(",") if m.strip()]
+            out.append(GeminiProvider(settings.gemini_api_key, models))
         elif name == "groq" and settings.groq_api_key:
             out.append(
                 OpenAICompatProvider(

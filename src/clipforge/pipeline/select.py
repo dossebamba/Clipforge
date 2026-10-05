@@ -13,9 +13,13 @@ from clipforge.pipeline.transcribe import Word, group_sentences
 
 log = logging.getLogger(__name__)
 
-# Fenêtres de ~10 min : une requête reste sous la limite de l'offre gratuite Groq (8 000 tokens/min)
-WINDOW_S = 10 * 60
-OVERLAP_S = 60
+# Fenêtres de transcription découpées par BUDGET DE TOKENS (et non par durée) : l'offre gratuite de
+# Groq limite à 8 000 tokens/min, réponse réservée comprise. Budget = transcription seule ;
+# + consignes (~1 000) + réponse plafonnée (2 200) reste sous la limite, même pour une
+# personne qui parle très vite.
+WINDOW_TOKENS = 2200
+OVERLAP_S = 45  # on reprend les dernières secondes de la fenêtre précédente (moments à cheval)
+MAX_CLIPS_PER_WINDOW = 4  # limite la taille de la réponse
 
 SYSTEM = """Tu es un monteur expert de contenus courts viraux pour TikTok.
 À partir d'une transcription horodatée, tu repères les moments qui fonctionnent seuls, hors contexte :
@@ -128,17 +132,32 @@ def _fmt_transcript(sentences: list[tuple[float, float, str]]) -> str:
     return "\n".join(f"[{s:.1f}] {t}" for s, _e, t in sentences)
 
 
-def _windows(sentences: list[tuple[float, float, str]], duration: float):
-    """Fenêtres de ~25 min avec recouvrement, pour les longues vidéos."""
-    if duration <= WINDOW_S + OVERLAP_S:
-        yield sentences
-        return
-    t = 0.0
-    while t < duration:
-        part = [s for s in sentences if s[0] >= t and s[0] < t + WINDOW_S + OVERLAP_S]
-        if part:
-            yield part
-        t += WINDOW_S
+def _cost(sentence: tuple[float, float, str]) -> int:
+    """Estimation prudente du nombre de tokens d'une ligne « [secondes] texte »."""
+    return len(sentence[2]) // 3 + 8
+
+
+def _windows(
+    sentences: list[tuple[float, float, str]], duration: float | None = None
+) -> list[list[tuple[float, float, str]]]:
+    """Découpe la transcription en fenêtres d'au plus WINDOW_TOKENS tokens, avec un léger
+    recouvrement. Une phrase seule plus grosse que le budget forme sa propre fenêtre."""
+    windows: list[list[tuple[float, float, str]]] = []
+    cur: list[tuple[float, float, str]] = []
+    used = 0
+    for s in sentences:
+        cost = _cost(s)
+        if cur and used + cost > WINDOW_TOKENS:
+            windows.append(cur)
+            tail = [x for x in cur if x[0] >= cur[-1][1] - OVERLAP_S]
+            tail_cost = sum(_cost(x) for x in tail)
+            # le recouvrement ne doit jamais empêcher la phrase suivante d'entrer dans le budget
+            cur, used = (tail, tail_cost) if tail_cost + cost <= WINDOW_TOKENS else ([], 0)
+        cur.append(s)
+        used += cost
+    if cur:
+        windows.append(cur)
+    return windows
 
 
 def _clean_hashtags(tags: Any) -> list[str]:
@@ -299,7 +318,7 @@ def select_clips(
 ) -> list[Candidate]:
     style = style or Style()
     sentences = group_sentences(words)
-    per_window = max(2, settings.max_clips_per_video)
+    per_window = min(max(2, settings.max_clips_per_video), MAX_CLIPS_PER_WINDOW)
     cands: list[Candidate] = []
     extra_rules, extra_fields = extras(style)
     for part in _windows(sentences, duration):

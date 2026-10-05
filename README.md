@@ -87,3 +87,15 @@ Les sorties de l'IA sont validées par le code (durées, positions, longueur des
 appliquées. Les changements d'un profil s'appliquent aux prochains clips, pas à ceux déjà montés.
 Rien ne garantit l'éligibilité au fil « Pour toi » : mesure la part des vues « Pour toi » dans les
 statistiques TikTok de tes premiers clips.
+
+## Limites des offres gratuites
+
+- Gemini : le quota est compté par modèle. `GEMINI_MODEL` accepte une liste (par défaut
+  `gemini-flash-latest,gemini-flash-lite-latest`) : si le premier est épuisé, le suivant est essayé.
+- Groq (8 000 tokens/minute) : la transcription est découpée par budget de tokens, et les requêtes
+  sont espacées d'après les en-têtes de limite du fournisseur, au lieu d'échouer puis de réessayer.
+  Conséquence : une vidéo longue et dense se traite plus lentement (environ 25 s de pause entre deux
+  requêtes quand Gemini est indisponible), mais elle aboutit.
+- Page Activité : les erreurs, vidéos ignorées et vidéos sans clip peuvent être supprimées une par
+  une ou en bloc. Elles sont masquées (pas effacées de la base) pour ne pas être retraitées au
+  relevé suivant ; redonner leur lien manuellement les remet en file.

@@ -127,6 +127,13 @@ def add_manual_url(session: Session, url: str, profile_id: int | None = None) ->
     remote = manual.resolve_url(url)
     existing = session.scalar(select(Video).where(Video.external_id == remote.external_id))
     if existing:
+        # Une vidéo masquée ou ignorée par un filtre est remise en file quand on la redemande
+        # explicitement (elle n'a aucun clip). Les autres statuts ne changent pas.
+        if existing.status in (V_SEEN, V_SKIPPED):
+            existing.status, existing.error, existing.stage = V_PENDING, "", ""
+            existing.priority = MANUAL_PRIORITY
+            if profile_id:
+                existing.profile_id = profile_id
         return existing
     video = Video(
         source_id=None,
