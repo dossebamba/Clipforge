@@ -506,10 +506,27 @@ def create_app(
         language: str = Form("français"),
         base_hashtags: str = Form(""),
         style: str = Form(""),
+        layout: str = Form("blur_fit"),
+        teaser: str | None = Form(None),
+        callouts: str | None = Form(None),
+        credit: str | None = Form(None),
+        brand_text: str = Form(""),
         db: Session = Depends(get_db),
     ):
         try:
-            profile_service.create_profile(db, name, niche, language, base_hashtags, style)
+            profile_service.create_profile(
+                db,
+                name,
+                niche,
+                language,
+                base_hashtags,
+                style,
+                layout=layout,
+                teaser=teaser is not None,  # case à cocher : absente du formulaire si décochée
+                callouts=callouts is not None,
+                credit=credit is not None,
+                brand_text=brand_text,
+            )
         except profile_service.ProfileError as e:
             return profiles_response(request, db, error=str(e), status=400)
         return RedirectResponse("/profiles", status_code=303)
@@ -540,13 +557,31 @@ def create_app(
         language: str = Form("français"),
         base_hashtags: str = Form(""),
         style: str = Form(""),
+        layout: str = Form("blur_fit"),
+        teaser: str | None = Form(None),
+        callouts: str | None = Form(None),
+        credit: str | None = Form(None),
+        brand_text: str = Form(""),
         db: Session = Depends(get_db),
     ):
         profile = db.get(Profile, profile_id)
         if not profile:
             raise HTTPException(404)
         try:
-            profile_service.update_profile(db, profile, name, niche, language, base_hashtags, style)
+            profile_service.update_profile(
+                db,
+                profile,
+                name,
+                niche,
+                language,
+                base_hashtags,
+                style,
+                layout=layout,
+                teaser=teaser is not None,
+                callouts=callouts is not None,
+                credit=credit is not None,
+                brand_text=brand_text,
+            )
             db.flush()
         except profile_service.ProfileError as e:
             db.rollback()
