@@ -75,6 +75,7 @@ Chaque profil règle donc des transformations, pour que le clip apporte quelque 
 
 | Option | Effet |
 |---|---|
+| Accroche permanente | Le titre accrocheur reste affiché en haut pendant tout le clip (toujours actif). |
 | Bande-annonce d'ouverture | Le passage le plus fort (2,5 à 7 s) est rejoué au tout début, puis le clip se déroule. |
 | Remarques à l'écran | 1 à 2 courts commentaires écrits par l'IA (réaction, contexte), jamais pendant l'accroche. |
 | Pseudo | Ton @compte en haut à droite. |
