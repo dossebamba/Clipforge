@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from typing import Any
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -35,7 +36,11 @@ def merge_hashtags(base: list[str], generated: list[str], limit: int = 6) -> lis
     return out[:limit]
 
 
-def _clean(name: str, niche: str, language: str, base_hashtags: str, style: str) -> dict[str, str]:
+LAYOUTS = ("blur_fit", "crop")
+MAX_BRAND = 40
+
+
+def _clean(name: str, niche: str, language: str, base_hashtags: str, style: str) -> dict[str, Any]:
     name, niche, style = name.strip(), niche.strip(), style.strip()
     language = language.strip() or "français"
     if not name:
@@ -53,6 +58,29 @@ def _clean(name: str, niche: str, language: str, base_hashtags: str, style: str)
     }
 
 
+def _clean_options(
+    layout: str | None,
+    teaser: bool | None,
+    callouts: bool | None,
+    brand_text: str | None,
+) -> dict[str, Any]:
+    """Valide les options de transformation ; les valeurs None sont laissées inchangées."""
+    out: dict[str, Any] = {}
+    if layout is not None:
+        if layout not in LAYOUTS:
+            raise ProfileError("Cadrage inconnu.")
+        out["layout"] = layout
+    for key, value in (("teaser", teaser), ("callouts", callouts)):
+        if value is not None:
+            out[key] = bool(value)
+    if brand_text is not None:
+        brand = re.sub(r"[{}\\\r\n]", "", brand_text).strip()
+        if len(brand) > MAX_BRAND:
+            raise ProfileError(f"Le pseudo est trop long ({MAX_BRAND} caractères max).")
+        out["brand_text"] = brand
+    return out
+
+
 def _name_taken(db: Session, name: str, except_id: int | None = None) -> bool:
     q = select(Profile.id).where(func.lower(Profile.name) == name.lower())
     if except_id is not None:
@@ -67,8 +95,14 @@ def create_profile(
     language: str = "français",
     base_hashtags: str = "",
     style: str = "",
+    *,
+    layout: str = "blur_fit",
+    teaser: bool = False,
+    callouts: bool = True,
+    brand_text: str = "",
 ) -> Profile:
     fields = _clean(name, niche, language, base_hashtags, style)
+    fields |= _clean_options(layout, teaser, callouts, brand_text)
     if _name_taken(db, fields["name"]):
         raise ProfileError("Un profil porte déjà ce nom.")
     profile = Profile(**fields)
@@ -85,8 +119,14 @@ def update_profile(
     language: str,
     base_hashtags: str,
     style: str,
+    *,
+    layout: str | None = None,
+    teaser: bool | None = None,
+    callouts: bool | None = None,
+    brand_text: str | None = None,
 ) -> Profile:
     fields = _clean(name, niche, language, base_hashtags, style)
+    fields |= _clean_options(layout, teaser, callouts, brand_text)
     if _name_taken(db, fields["name"], except_id=profile.id):
         raise ProfileError("Un profil porte déjà ce nom.")
     for key, value in fields.items():

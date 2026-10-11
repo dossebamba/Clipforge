@@ -87,3 +87,11 @@ th { color: var(--muted); font-weight: 500; font-size: 13px; }
 .profile-form { display: grid; grid-template-columns: 1fr 1.4fr 140px 1.2fr auto; gap: 10px; align-items: end; }
 .profile-form .wide { grid-column: 1 / span 4; }
 @media (max-width: 900px) { .profile-form, .form-grid { grid-template-columns: 1fr; } .profile-form .wide { grid-column: auto; } }
+
+.transform { grid-column: 1 / -1; border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px;
+  display: grid; grid-template-columns: 1fr 1fr; gap: 12px 18px; margin: 0; }
+.transform legend { padding: 0 6px; font-weight: 600; }
+.transform .check { display: flex; gap: 10px; align-items: flex-start; }
+.transform .check input { width: auto; margin-top: 4px; }
+.transform .check small { color: var(--muted); }
+@media (max-width: 900px) { .transform { grid-template-columns: 1fr; } }

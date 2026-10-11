@@ -56,6 +56,10 @@ def process_video(
             niche=p.niche if p else "",
             instructions=p.style if p else "",
             hashtags=p.hashtag_list if p else [],
+            layout=p.layout if p else "",
+            callouts=p.callouts if p else False,
+            teaser=p.teaser if p else False,
+            brand_text=p.brand_text if p else "",
         )
 
     dl_dir = settings.downloads_dir / str(video_id)
@@ -76,8 +80,29 @@ def process_video(
             _set_stage(factory, video_id, f"render {i}/{len(cands)}")
             rel = f"{video_id}/{i:02d}.mp4"
             out = settings.clips_dir / rel
+            log.info(
+                "Vidéo %s, clip %d : %d remarque(s), bande-annonce=%s",
+                video_id,
+                i,
+                len(c.callouts),
+                f"{c.teaser[0]:.1f}-{c.teaser[1]:.1f}s" if c.teaser else "non",
+            )
+            transform = render.Transform(
+                callouts=c.callouts,
+                teaser=c.teaser,
+                brand=style.brand_text,
+            )
             render.render_clip(
-                dl.video_path, out, c.start, c.end, words, c.hook, settings, work, settings.layout
+                dl.video_path,
+                out,
+                c.start,
+                c.end,
+                words,
+                c.hook,
+                settings,
+                work,
+                style.layout or settings.layout,
+                transform,
             )
             render.make_poster(out, out.with_suffix(".jpg"))
             with session_scope(factory) as s:

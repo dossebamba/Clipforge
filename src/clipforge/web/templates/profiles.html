@@ -1,5 +1,25 @@
 {% extends "base.html" %}
 {% block title %}Profils · Clipforge{% endblock %}
+
+{# Options de transformation (p = profil existant, ou None pour un nouveau profil) #}
+{% macro transform_fields(p) %}
+<fieldset class="transform wide">
+  <legend>Transformations du montage <span class="meta">— pour que chaque clip apporte plus que de simples sous-titres</span></legend>
+  <label><small>Cadrage</small>
+    <select name="layout">
+      <option value="blur_fit" {{ 'selected' if not p or p.layout == 'blur_fit' }}>Vidéo entière, fond flouté</option>
+      <option value="crop" {{ 'selected' if p and p.layout == 'crop' }}>Plein écran recadré (centre)</option>
+    </select></label>
+  <label><small>Pseudo affiché en haut à droite</small>
+    <input type="text" name="brand_text" maxlength="40" value="{{ p.brand_text if p else '' }}" placeholder="@moncompte"></label>
+  <label class="check"><input type="checkbox" name="teaser" {{ 'checked' if p and p.teaser }}>
+    <span><b>Bande-annonce d'ouverture</b><br><small>Le passage le plus fort est rejoué 3 à 6 s au début, puis le clip se déroule.</small></span></label>
+  <label class="check"><input type="checkbox" name="callouts" {{ 'checked' if not p or p.callouts }}>
+    <span><b>Remarques à l'écran</b><br><small>1 à 2 courts commentaires écrits par l'IA (réaction, contexte).</small></span></label>
+  <p class="meta" style="margin:0">Le crédit du créateur (« Source : nom de la chaîne ») est toujours ajouté à la <b>description</b> de chaque clip, jamais sur la vidéo.</p>
+</fieldset>
+{% endmacro %}
+
 {% block content %}
 <h1>Profils</h1>
 <p class="sub">Un profil = un compte TikTok / un thème. Chaque chaîne et chaque vidéo appartient à un seul profil, donc un clip n'est destiné qu'à un seul compte. Le thème et le ton guident l'IA.</p>
@@ -17,6 +37,7 @@
       <input type="text" name="base_hashtags" placeholder="#voiture #auto #supercar"></label>
     <label class="wide"><small>Consignes de ton (facultatif)</small>
       <input type="text" name="style" maxlength="500" placeholder="ton direct et enthousiaste, vocabulaire de passionné, pas d'emojis"></label>
+    {{ transform_fields(None) }}
     <button class="primary">Créer le profil</button>
   </form>
 </div>
@@ -40,8 +61,10 @@
       <label><small>Langue</small><input type="text" name="language" value="{{ p.language }}" maxlength="40"></label>
       <label><small>Hashtags fixes</small><input type="text" name="base_hashtags" value="{{ p.base_hashtags }}"></label>
       <label class="wide"><small>Consignes de ton</small><input type="text" name="style" value="{{ p.style }}" maxlength="500"></label>
+      {{ transform_fields(p) }}
       <button class="primary">Enregistrer</button>
     </form>
+    <p class="meta" style="margin:8px 0 0">Les changements s'appliquent aux prochains clips, pas à ceux déjà montés.</p>
     <form method="post" action="/profiles/{{ p.id }}/delete" style="margin-top:10px"
           onsubmit="return confirm('Supprimer ce profil ?')">
       <button class="danger">Supprimer ce profil</button>

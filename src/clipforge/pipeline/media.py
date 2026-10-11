@@ -22,6 +22,14 @@ def ffmpeg_path() -> str:
     return found
 
 
+def has_audio(path: Path) -> bool:
+    """Vrai si le fichier contient une piste audio (FFmpeg liste les flux sur stderr)."""
+    proc = subprocess.run(  # noqa: S603 - arguments construits par le code
+        [ffmpeg_path(), "-hide_banner", "-i", str(path)], capture_output=True, text=True
+    )
+    return "Audio:" in proc.stderr
+
+
 def run_ffmpeg(args: list[str], cwd: Path | None = None) -> None:
     cmd = [ffmpeg_path(), "-y", "-hide_banner", "-loglevel", "error", *args]
     proc = subprocess.run(  # noqa: S603 - arguments construits par le code, pas par l'utilisateur

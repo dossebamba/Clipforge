@@ -70,6 +70,12 @@ class Profile(Base):
     style: Mapped[str] = mapped_column(String(500), default="")  # consignes de ton pour l'IA
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
+    # Transformations du montage (valeurs par défaut identiques à PROFILE_COLUMNS dans session.py)
+    layout: Mapped[str] = mapped_column(String(16), default="blur_fit", server_default="blur_fit")
+    teaser: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
+    callouts: Mapped[bool] = mapped_column(Boolean, default=True, server_default="1")
+    brand_text: Mapped[str] = mapped_column(String(40), default="", server_default="")
+
     sources: Mapped[list[Source]] = relationship(back_populates="profile")
     videos: Mapped[list[Video]] = relationship(back_populates="profile")
 

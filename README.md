@@ -67,3 +67,23 @@ chaque vidéo appartient à un seul profil, donc un clip n'est destiné qu'à un
 Le sélecteur en haut du dashboard filtre toutes les pages et les compteurs par profil.
 Le thème, la langue et les consignes de ton d'un profil guident l'IA ; ses hashtags fixes sont
 ajoutés à chaque légende. Une base existante est migrée automatiquement (profil « Général »).
+
+## Transformations du montage
+
+TikTok écarte du fil « Pour toi » les contenus non originaux, et ajouter des sous-titres ne suffit pas.
+Chaque profil règle donc des transformations, pour que le clip apporte quelque chose en plus :
+
+| Option | Effet |
+|---|---|
+| Bande-annonce d'ouverture | Le passage le plus fort (2,5 à 7 s) est rejoué au tout début, puis le clip se déroule. |
+| Remarques à l'écran | 1 à 2 courts commentaires écrits par l'IA (réaction, contexte), jamais pendant l'accroche. |
+| Pseudo | Ton @compte en haut à droite. |
+| Cadrage | Vidéo entière sur fond flouté, ou plein écran recadré. |
+
+Le crédit du créateur (« Source : nom de la chaîne ») n'est pas affiché sur la vidéo : il est ajouté
+à la description de chaque clip.
+
+Les sorties de l'IA sont validées par le code (durées, positions, longueur des textes) avant d'être
+appliquées. Les changements d'un profil s'appliquent aux prochains clips, pas à ceux déjà montés.
+Rien ne garantit l'éligibilité au fil « Pour toi » : mesure la part des vues « Pour toi » dans les
+statistiques TikTok de tes premiers clips.

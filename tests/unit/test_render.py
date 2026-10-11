@@ -29,6 +29,28 @@ def test_ass_has_hook_and_one_event_per_word_relative_to_clip():
     assert "UN" not in " ".join(subs)  # mot avant le clip exclu
 
 
+def test_subtitle_lines_stay_short_enough_for_the_screen():
+    from clipforge.pipeline.render import MAX_LINE_CHARS, _chunks
+
+    long_words = [Word(w, i * 0.5, i * 0.5 + 0.4) for i, w in enumerate(
+        ["extraordinairement", "incompréhensible", "oui", "non", "anticonstitutionnellement", "ok"]
+    )]  # fmt: skip
+    for chunk in _chunks(long_words):
+        line = " ".join(w.text for w in chunk)
+        # un mot seul plus long que la limite reste seul sur sa ligne (le retour à la ligne ASS l'adapte)
+        assert len(chunk) == 1 or len(line) <= MAX_LINE_CHARS
+    assert [len(c) for c in _chunks(long_words)][:2] == [1, 1]
+    # des mots courts sont toujours regroupés par 3
+    short = [
+        Word(w, i * 0.3, i * 0.3 + 0.2) for i, w in enumerate(["un", "deux", "trois", "quatre"])
+    ]
+    assert [len(c) for c in _chunks(short)] == [3, 1]
+
+
+def test_ass_wraps_instead_of_overflowing():
+    assert "WrapStyle: 0" in build_ass(_words(), 0.0, 3.0, "", S)
+
+
 def test_ass_escapes_braces():
     ass = build_ass([Word("a{b}", 0, 1)], 0, 2, "", S)
     assert "{b}" not in ass.split("[Events]")[1]

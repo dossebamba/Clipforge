@@ -31,19 +31,30 @@ def make_engine(db_path: Path | str) -> Engine:
     return engine
 
 
-def migrate(engine: Engine) -> None:
-    """Met à niveau une base créée par une version précédente (create_all n'ajoute pas de colonnes).
+# Colonnes ajoutées après la création initiale : (table, colonne, définition SQL).
+# create_all ne modifie jamais une table existante, d'où cette liste.
+ADDED_COLUMNS = [
+    ("sources", "profile_id", "INTEGER REFERENCES profiles(id)"),
+    ("videos", "profile_id", "INTEGER REFERENCES profiles(id)"),
+    ("profiles", "layout", "VARCHAR(16) NOT NULL DEFAULT 'blur_fit'"),
+    ("profiles", "teaser", "BOOLEAN NOT NULL DEFAULT 0"),
+    ("profiles", "callouts", "BOOLEAN NOT NULL DEFAULT 1"),
+    ("profiles", "brand_text", "VARCHAR(40) NOT NULL DEFAULT ''"),
+]
 
-    - ajoute profile_id sur sources et videos ;
+
+def migrate(engine: Engine) -> None:
+    """Met à niveau une base créée par une version précédente.
+
+    - ajoute les colonnes manquantes (voir ADDED_COLUMNS) ;
     - garantit l'existence d'un profil (« Général ») et y rattache les lignes sans profil.
     """
     with engine.begin() as conn:
-        for table in ("sources", "videos"):
+        for table, column, ddl in ADDED_COLUMNS:
             cols = {row[1] for row in conn.exec_driver_sql(f"PRAGMA table_info({table})")}
-            if "profile_id" not in cols:
-                conn.exec_driver_sql(
-                    f"ALTER TABLE {table} ADD COLUMN profile_id INTEGER REFERENCES profiles(id)"
-                )
+            if column not in cols:
+                # noms issus de la liste constante ci-dessus, jamais d'une saisie
+                conn.exec_driver_sql(f"ALTER TABLE {table} ADD COLUMN {column} {ddl}")  # noqa: S608
         pid = ensure_default_profile(conn)  # il y a toujours au moins un profil
         for table in ("sources", "videos"):
             # noms de tables constants (liste fixe ci-dessus), valeur paramétrée
