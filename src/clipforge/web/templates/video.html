@@ -9,6 +9,14 @@
   · {{ video.count('ready') }} à poster · {{ video.count('posted') }} postés
 </p>
 
+{% if error %}<div class="auth-error" role="alert">{{ error }}</div>{% endif %}
+<form method="post" action="/videos/{{ video.id }}/profile" class="row" style="margin-bottom:16px">
+  <small class="meta">Profil (compte TikTok) :</small>
+  <select name="profile_id" onchange="this.form.submit()" aria-label="Profil de la vidéo" style="width:auto">
+    {% for p in profiles %}<option value="{{ p.id }}" {{ 'selected' if p.id == video.profile_id }}>{{ p.name }}</option>{% endfor %}
+  </select>
+</form>
+
 {% if video.status in ['processing', 'pending'] %}
 <div class="panel">⏳ {{ video.stage | stage if video.stage else 'En attente de traitement' }}… la page se rafraîchit toute seule.</div>
 {% elif video.status == 'failed' %}

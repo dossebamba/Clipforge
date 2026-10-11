@@ -10,10 +10,22 @@
 <header>
   <div class="bar">
     <a class="brand" href="/">Clip<b>forge</b></a>
+    {% if profiles %}
+    <form method="post" action="/profiles/select" class="switcher" title="Profil actif">
+      <select name="profile" onchange="this.form.submit()" aria-label="Profil actif">
+        <option value="all" {{ 'selected' if not active_profile }}>Tous les profils</option>
+        {% for p in profiles %}
+        <option value="{{ p.id }}" {{ 'selected' if active_profile and active_profile.id == p.id }}>{{ p.name }}</option>
+        {% endfor %}
+      </select>
+      <noscript><button>OK</button></noscript>
+    </form>
+    {% endif %}
     <nav>
       <a href="/" class="{{ 'on' if tab == 'post' }}">À poster{% if stats.ready %} ({{ stats.ready }}){% endif %}</a>
       <a href="/published" class="{{ 'on' if tab == 'published' }}">Publiés</a>
       <a href="/sources" class="{{ 'on' if tab == 'sources' }}">Sources</a>
+      <a href="/profiles" class="{{ 'on' if tab == 'profiles' }}">Profils</a>
       <a href="/activity" class="{{ 'on' if tab == 'activity' }}">Activité{% if stats.failed %} <span class="badge bad">{{ stats.failed }}</span>{% endif %}</a>
     </nav>
     <div class="stats">

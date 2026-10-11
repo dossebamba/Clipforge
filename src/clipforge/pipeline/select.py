@@ -25,7 +25,7 @@ de remerciements, de transition ou qui dépendent de ce qui précède.
 Tu réponds uniquement en JSON valide."""
 
 PROMPT = """Vidéo : « {title} » (chaîne : {channel}).
-Transcription, une ligne par phrase au format [secondes] texte :
+{profile_block}Transcription, une ligne par phrase au format [secondes] texte :
 
 {transcript}
 
@@ -44,6 +44,28 @@ Réponds avec ce JSON exact :
   "hashtags": ["#exemple", "..."],
   "reason": "<pourquoi ce moment fonctionne, 1 phrase>"
 }}]}}"""
+
+
+@dataclass
+class Style:
+    """Ce que le profil (compte TikTok) impose à l'IA."""
+
+    language: str = ""
+    niche: str = ""
+    instructions: str = ""
+    hashtags: list[str] = field(default_factory=list)  # ajoutés par le code, pas par l'IA
+
+
+def profile_block(style: Style) -> str:
+    lines = []
+    if style.niche:
+        lines.append(
+            f"Compte TikTok cible : thème « {style.niche} ». Privilégie les moments qui intéressent "
+            "ce public et ignore ceux qui sont hors sujet."
+        )
+    if style.instructions:
+        lines.append(f"Consignes de ton pour les textes : {style.instructions}")
+    return "\n".join(lines) + "\n" if lines else ""
 
 
 @dataclass
@@ -153,7 +175,9 @@ def select_clips(
     title: str,
     channel: str,
     settings: Settings,
+    style: Style | None = None,
 ) -> list[Candidate]:
+    style = style or Style()
     sentences = group_sentences(words)
     per_window = max(2, settings.max_clips_per_video)
     cands: list[Candidate] = []
@@ -161,8 +185,9 @@ def select_clips(
         prompt = PROMPT.format(
             title=title,
             channel=channel or "inconnue",
+            profile_block=profile_block(style),
             transcript=_fmt_transcript(part),
-            language=settings.content_language,
+            language=style.language or settings.content_language,
             n=per_window,
             min_s=settings.clip_min_s,
             max_s=settings.clip_max_s,

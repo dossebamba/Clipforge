@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import shutil
 from collections.abc import Iterator
@@ -17,6 +18,7 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload, sessionmaker
 
+from clipforge import profiles as profile_service
 from clipforge.config import Settings, get_settings
 from clipforge.db.models import (
     C_POSTED,
@@ -28,6 +30,7 @@ from clipforge.db.models import (
     V_PROCESSING,
     V_SKIPPED,
     Clip,
+    Profile,
     Source,
     User,
     Video,
@@ -41,6 +44,7 @@ from clipforge.web import auth
 
 log = logging.getLogger(__name__)
 HERE = Path(__file__).parent
+PROFILE_COOKIE = "clipforge_profile"
 
 
 class NotAuthenticated(Exception):
@@ -126,6 +130,11 @@ def create_app(
         if user is None:
             raise NotAuthenticated
         request.state.user = user
+        # Profil actif (choisi dans l'en-tête, mémorisé en cookie) ; None = tous les profils
+        profiles = list(db.scalars(select(Profile).order_by(Profile.id)))
+        raw = request.cookies.get(PROFILE_COOKIE, "")
+        request.state.profiles = profiles
+        request.state.active_profile = next((p for p in profiles if str(p.id) == raw), None)
         return user
 
     # Toutes les pages et actions du dashboard passent par ce routeur : connexion obligatoire.
@@ -134,37 +143,60 @@ def create_app(
     def back(request: Request, fallback: str = "/") -> RedirectResponse:
         return RedirectResponse(request.headers.get("referer") or fallback, status_code=303)
 
-    def render(request: Request, name: str, **ctx):
-        user = getattr(request.state, "user", None)
-        return templates.TemplateResponse(request, name, {"now": utcnow(), "user": user, **ctx})
-
-    def video_query():
-        return select(Video).options(selectinload(Video.clips))
-
-    def stats(db: Session) -> dict[str, int]:
-        today = datetime.combine(utcnow().date(), datetime.min.time())
-        count = lambda *w: db.scalar(select(func.count()).select_from(Clip).where(*w)) or 0  # noqa: E731
-        return {
-            "ready": count(Clip.status == C_READY),
-            "posted": count(Clip.status == C_POSTED),
-            "posted_today": count(Clip.status == C_POSTED, Clip.posted_at >= today),
-            "queue": db.scalar(
-                select(func.count())
-                .select_from(Video)
-                .where(Video.status.in_([V_PENDING, V_PROCESSING]))
-            )
-            or 0,
-            "failed": db.scalar(
-                select(func.count()).select_from(Video).where(Video.status == V_FAILED)
-            )
-            or 0,
+    def render(request: Request, name: str, status: int = 200, **ctx):
+        state = request.state
+        base = {
+            "now": utcnow(),
+            "user": getattr(state, "user", None),
+            "profiles": getattr(state, "profiles", []),
+            "active_profile": getattr(state, "active_profile", None),
         }
+        return templates.TemplateResponse(request, name, {**base, **ctx}, status_code=status)
+
+    def active_id(request: Request) -> int | None:
+        active = getattr(request.state, "active_profile", None)
+        return active.id if active else None
+
+    def video_query(request: Request | None = None):
+        """Vidéos avec leurs clips, limitées au profil actif si un profil est choisi."""
+        q = select(Video).options(selectinload(Video.clips), selectinload(Video.profile))
+        pid = active_id(request) if request is not None else None
+        return q.where(Video.profile_id == pid) if pid else q
+
+    def stats(db: Session, request: Request) -> dict[str, int]:
+        today = datetime.combine(utcnow().date(), datetime.min.time())
+        pid = active_id(request)
+
+        def clips(*w):
+            q = select(func.count()).select_from(Clip).join(Video, Clip.video_id == Video.id)
+            q = q.where(*w, *([Video.profile_id == pid] if pid else []))
+            return db.scalar(q) or 0
+
+        def videos(*w):
+            q = select(func.count()).select_from(Video).where(*w)
+            return db.scalar(q.where(Video.profile_id == pid) if pid else q) or 0
+
+        return {
+            "ready": clips(Clip.status == C_READY),
+            "posted": clips(Clip.status == C_POSTED),
+            "posted_today": clips(Clip.status == C_POSTED, Clip.posted_at >= today),
+            "queue": videos(Video.status.in_([V_PENDING, V_PROCESSING])),
+            "failed": videos(Video.status == V_FAILED),
+        }
+
+    def form_profile(db: Session, request: Request, raw: str) -> int | None:
+        """Profil choisi dans un formulaire ; à défaut le profil actif, puis le premier."""
+        if raw.isdigit():
+            found = db.get(Profile, int(raw))
+            if found is not None:
+                return found.id
+        return active_id(request) or service.default_profile_id(db)
 
     # ---------- Pages ----------
 
     @protected.get("/")
     def to_post(request: Request, channel: str = "", db: Session = Depends(get_db)):
-        videos = list(db.scalars(video_query().order_by(Video.created_at.desc())))
+        videos = list(db.scalars(video_query(request).order_by(Video.created_at.desc())))
         channels = sorted({v.origin for v in videos})
         blocks = [
             v
@@ -180,7 +212,7 @@ def create_app(
             videos=blocks,
             channels=channels,
             channel=channel,
-            stats=stats(db),
+            stats=stats(db, request),
             tab="post",
         )
 
@@ -188,7 +220,7 @@ def create_app(
     def published(request: Request, channel: str = "", db: Session = Depends(get_db)):
         videos = [
             v
-            for v in db.scalars(video_query().order_by(Video.processed_at.desc()))
+            for v in db.scalars(video_query(request).order_by(Video.processed_at.desc()))
             if v.is_published
         ]
         channels = sorted({v.origin for v in videos})
@@ -200,28 +232,50 @@ def create_app(
             videos=videos,
             channels=channels,
             channel=channel,
-            stats=stats(db),
+            stats=stats(db, request),
             tab="published",
+        )
+
+    def video_response(
+        request: Request, db: Session, video_id: int, error: str | None = None, status: int = 200
+    ):
+        video = db.scalar(video_query().where(Video.id == video_id))  # sans filtre : lien direct
+        if not video:
+            raise HTTPException(404)
+        return render(
+            request,
+            "video.html",
+            status,
+            video=video,
+            error=error,
+            stats=stats(db, request),
+            tab="",
         )
 
     @protected.get("/video/{video_id}")
     def video_page(video_id: int, request: Request, db: Session = Depends(get_db)):
-        video = db.scalar(video_query().where(Video.id == video_id))
-        if not video:
-            raise HTTPException(404)
-        return render(request, "video.html", video=video, stats=stats(db), tab="")
+        return video_response(request, db, video_id)
 
     @protected.get("/sources")
     def sources_page(request: Request, db: Session = Depends(get_db)):
-        sources = list(db.scalars(select(Source).order_by(Source.created_at.desc())))
-        return render(request, "sources.html", sources=sources, stats=stats(db), tab="sources")
+        q = select(Source).options(selectinload(Source.profile)).order_by(Source.created_at.desc())
+        if pid := active_id(request):
+            q = q.where(Source.profile_id == pid)
+        return render(
+            request,
+            "sources.html",
+            sources=list(db.scalars(q)),
+            default_profile=active_id(request) or service.default_profile_id(db),
+            stats=stats(db, request),
+            tab="sources",
+        )
 
     @protected.get("/activity")
     def activity(request: Request, db: Session = Depends(get_db)):
         def by_status(*statuses: str):
             return list(
                 db.scalars(
-                    video_query()
+                    video_query(request)
                     .where(Video.status.in_(statuses))
                     .order_by(Video.created_at.desc())
                 )
@@ -236,7 +290,7 @@ def create_app(
             failed=by_status(V_FAILED),
             skipped=by_status(V_SKIPPED)[:30],
             empty=empty,
-            stats=stats(db),
+            stats=stats(db, request),
             tab="activity",
         )
 
@@ -324,6 +378,7 @@ def create_app(
         identifier: str = Form(...),
         ignore_keywords: str = Form(""),
         max_duration_min: int = Form(0),
+        profile_id: str = Form(""),
         db: Session = Depends(get_db),
     ):
         if platform not in ("youtube", "twitch") or not identifier.strip():
@@ -335,14 +390,21 @@ def create_app(
             settings,
             ignore_keywords=ignore_keywords,
             max_duration_s=max(max_duration_min, 0) * 60,
+            profile_id=form_profile(db, request, profile_id),
         )
         return RedirectResponse("/sources", status_code=303)
 
     @protected.post("/sources/manual")
-    def add_manual(request: Request, urls: str = Form(...), db: Session = Depends(get_db)):
+    def add_manual(
+        request: Request,
+        urls: str = Form(...),
+        profile_id: str = Form(""),
+        db: Session = Depends(get_db),
+    ):
+        pid = form_profile(db, request, profile_id)
         for url in [u.strip() for u in urls.splitlines() if u.strip()]:
             try:
-                service.add_manual_url(db, url)
+                service.add_manual_url(db, url, pid)
                 db.commit()
             except Exception as e:
                 db.rollback()
@@ -365,10 +427,146 @@ def create_app(
             db.delete(src)
         return RedirectResponse("/sources", status_code=303)
 
+    @protected.post("/sources/{source_id}/profile")
+    def move_source(
+        source_id: int,
+        request: Request,
+        profile_id: int = Form(...),
+        db: Session = Depends(get_db),
+    ):
+        """Rattache la chaîne à un autre profil, ainsi que ses vidéos pas encore postées."""
+        src, target = db.get(Source, source_id), db.get(Profile, profile_id)
+        if not src or not target:
+            raise HTTPException(404)
+        src.profile_id = target.id
+        for v in src.videos:
+            # un clip déjà posté reste sur le compte où il est sorti
+            with contextlib.suppress(profile_service.ProfileError):
+                profile_service.move_video(db, v, target)
+        return back(request, "/sources")
+
+    @protected.post("/videos/{video_id}/profile")
+    def move_video(
+        video_id: int,
+        request: Request,
+        profile_id: int = Form(...),
+        db: Session = Depends(get_db),
+    ):
+        video, target = db.get(Video, video_id), db.get(Profile, profile_id)
+        if not video or not target:
+            raise HTTPException(404)
+        try:
+            profile_service.move_video(db, video, target)
+        except profile_service.ProfileError as e:
+            return video_response(request, db, video_id, error=str(e), status=400)
+        return back(request, f"/video/{video_id}")
+
     @protected.post("/poll")
     def poll_now(request: Request, db: Session = Depends(get_db)):
         service.poll_all(db, settings)
         return back(request, "/sources")
+
+    # ---------- Profils (comptes TikTok / thèmes) ----------
+
+    def profiles_response(
+        request: Request, db: Session, error: str | None = None, status: int = 200, **ctx
+    ):
+        rows = []
+        for p in db.scalars(select(Profile).order_by(Profile.id)):
+            vids = list(db.scalars(select(Video).where(Video.profile_id == p.id)))
+            clips = [c for v in vids for c in v.clips]
+            rows.append(
+                {
+                    "p": p,
+                    "sources": len(p.sources),
+                    "ready": sum(c.status == C_READY for c in clips),
+                    "posted": sum(c.status == C_POSTED for c in clips),
+                }
+            )
+        return render(
+            request,
+            "profiles.html",
+            status,
+            rows=rows,
+            error=error,
+            stats=stats(db, request),
+            tab="profiles",
+            **ctx,
+        )
+
+    @protected.get("/profiles")
+    def profiles_page(request: Request, db: Session = Depends(get_db)):
+        return profiles_response(request, db)
+
+    @protected.post("/profiles")
+    def create_profile(
+        request: Request,
+        name: str = Form(""),
+        niche: str = Form(""),
+        language: str = Form("français"),
+        base_hashtags: str = Form(""),
+        style: str = Form(""),
+        db: Session = Depends(get_db),
+    ):
+        try:
+            profile_service.create_profile(db, name, niche, language, base_hashtags, style)
+        except profile_service.ProfileError as e:
+            return profiles_response(request, db, error=str(e), status=400)
+        return RedirectResponse("/profiles", status_code=303)
+
+    @protected.post("/profiles/select")
+    def select_profile(request: Request, profile: str = Form("all")):
+        resp = back(request, "/")
+        if profile == "all":
+            resp.delete_cookie(PROFILE_COOKIE, path="/")
+        else:
+            resp.set_cookie(
+                PROFILE_COOKIE,
+                profile,
+                max_age=365 * 86400,
+                httponly=True,
+                samesite="lax",
+                secure=settings.secure_cookies,
+                path="/",
+            )
+        return resp
+
+    @protected.post("/profiles/{profile_id}")
+    def update_profile(
+        profile_id: int,
+        request: Request,
+        name: str = Form(""),
+        niche: str = Form(""),
+        language: str = Form("français"),
+        base_hashtags: str = Form(""),
+        style: str = Form(""),
+        db: Session = Depends(get_db),
+    ):
+        profile = db.get(Profile, profile_id)
+        if not profile:
+            raise HTTPException(404)
+        try:
+            profile_service.update_profile(db, profile, name, niche, language, base_hashtags, style)
+            db.flush()
+        except profile_service.ProfileError as e:
+            db.rollback()
+            return profiles_response(request, db, error=str(e), status=400)
+        return RedirectResponse("/profiles", status_code=303)
+
+    @protected.post("/profiles/{profile_id}/delete")
+    def delete_profile(profile_id: int, request: Request, db: Session = Depends(get_db)):
+        profile = db.get(Profile, profile_id)
+        if not profile:
+            raise HTTPException(404)
+        try:
+            profile_service.delete_profile(db, profile)
+            db.flush()
+        except profile_service.ProfileError as e:
+            return profiles_response(request, db, error=str(e), status=400)
+        resp = RedirectResponse("/profiles", status_code=303)
+        if request.cookies.get(PROFILE_COOKIE) == str(profile_id):
+            resp.delete_cookie(PROFILE_COOKIE, path="/")
+        return resp
 
     @protected.get("/media/{path:path}")
     def media(path: str):

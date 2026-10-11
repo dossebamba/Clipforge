@@ -14,6 +14,10 @@
       <input type="text" name="ignore_keywords" placeholder="rediffusion, live"></label>
     <label><small>Durée max (min, 0 = défaut)</small>
       <input type="number" name="max_duration_min" value="0" min="0"></label>
+    <label><small>Profil (compte TikTok)</small>
+      <select name="profile_id">
+        {% for p in profiles %}<option value="{{ p.id }}" {{ 'selected' if p.id == default_profile }}>{{ p.name }}</option>{% endfor %}
+      </select></label>
     <button class="primary">Ajouter</button>
   </form>
 </div>
@@ -22,7 +26,11 @@
   <h2>Ajouter des liens</h2>
   <form method="post" action="/sources/manual">
     <textarea name="urls" style="min-height:80px" required placeholder="Un lien par ligne : vidéo YouTube, VOD ou clip Twitch…"></textarea>
-    <div class="row" style="margin-top:8px"><button class="primary">Traiter ces liens</button>
+    <div class="row" style="margin-top:8px">
+      <select name="profile_id" style="width:auto" aria-label="Profil">
+        {% for p in profiles %}<option value="{{ p.id }}" {{ 'selected' if p.id == default_profile }}>{{ p.name }}</option>{% endfor %}
+      </select>
+      <button class="primary">Traiter ces liens</button>
       <span class="meta">Les liens manuels passent avant la file des chaînes.</span></div>
   </form>
 </div>
@@ -34,12 +42,19 @@
   </div>
   {% if sources %}
   <table>
-    <tr><th>Chaîne</th><th>Plateforme</th><th>Dernier relevé</th><th>État</th><th></th></tr>
+    <tr><th>Chaîne</th><th>Profil</th><th>Plateforme</th><th>Dernier relevé</th><th>État</th><th></th></tr>
     {% for s in sources %}
     <tr>
       <td><b>{{ s.display_name or s.identifier }}</b>
         <div class="meta">{{ s.identifier }}{% if s.ignore_keywords %} · ignore : {{ s.ignore_keywords }}{% endif %}</div>
         {% if s.last_error %}<div class="err">{{ s.last_error }}</div>{% endif %}</td>
+      <td>
+        <form method="post" action="/sources/{{ s.id }}/profile">
+          <select name="profile_id" onchange="this.form.submit()" aria-label="Profil de la chaîne" style="width:auto">
+            {% for p in profiles %}<option value="{{ p.id }}" {{ 'selected' if p.id == s.profile_id }}>{{ p.name }}</option>{% endfor %}
+          </select>
+        </form>
+      </td>
       <td>{{ s.platform }}</td>
       <td>{{ s.last_checked.strftime('%d/%m %H:%M') if s.last_checked else '—' }}</td>
       <td>{% if s.enabled %}<span class="badge ok">Actif</span>{% else %}<span class="badge">En pause</span>{% endif %}</td>

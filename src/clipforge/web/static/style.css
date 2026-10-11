@@ -80,3 +80,10 @@ th { color: var(--muted); font-weight: 500; font-size: 13px; }
   border-radius: 8px; padding: 9px 12px; margin-bottom: 8px; font-size: 14px; }
 .auth-alt { color: var(--muted); text-align: center; margin: 18px 0 0; font-size: 14px; }
 .auth-alt a { color: var(--accent2); text-decoration: underline; }
+
+.switcher select { width: auto; font-weight: 600; }
+.badge.profile { background: rgba(37,244,238,.15); color: var(--accent2); }
+.form-grid { grid-template-columns: 130px 1fr 1fr 120px 170px auto; }
+.profile-form { display: grid; grid-template-columns: 1fr 1.4fr 140px 1.2fr auto; gap: 10px; align-items: end; }
+.profile-form .wide { grid-column: 1 / span 4; }
+@media (max-width: 900px) { .profile-form, .form-grid { grid-template-columns: 1fr; } .profile-form .wide { grid-column: auto; } }

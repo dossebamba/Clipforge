@@ -59,3 +59,11 @@ Sécurité : mots de passe hachés (scrypt), sessions côté serveur révocables
 limitation des tentatives de connexion, contrôle d'origine anti-CSRF, clips servis uniquement aux
 utilisateurs connectés. Si tu exposes Clipforge sur Internet, place-le derrière HTTPS
 (et mets `SECURE_COOKIES=true`).
+
+## Profils (comptes TikTok)
+
+Un profil = un compte TikTok / un thème (ex. « Voiture », « Divertissement »). Chaque chaîne et
+chaque vidéo appartient à un seul profil, donc un clip n'est destiné qu'à un seul compte.
+Le sélecteur en haut du dashboard filtre toutes les pages et les compteurs par profil.
+Le thème, la langue et les consignes de ton d'un profil guident l'IA ; ses hashtags fixes sont
+ajoutés à chaque légende. Une base existante est migrée automatiquement (profil « Général »).

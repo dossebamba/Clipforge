@@ -7,7 +7,7 @@
   </div>
   <div class="body">
     <div class="title">{{ v.title or v.url }}</div>
-    <div class="meta">{{ v.origin }}</div>
+    <div class="meta">{{ v.origin }}{% if v.profile and not active_profile %} · <span class="badge profile">{{ v.profile.name }}</span>{% endif %}</div>
     <div class="row" style="margin-top:8px">
       {% if v.status == 'done' %}
         <span class="badge ok">{{ v.count('ready') }} à poster</span>

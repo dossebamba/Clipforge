@@ -15,8 +15,9 @@ Sources (chaînes surveillées + liens manuels)
 ## Modèle de données
 
 ```
-Source (plateforme, identifiant, actif, filtres, dernière_vérif)
-Video  (source_id | null si manuel, url, titre, statut_traitement)
+Profile (nom, thème, langue, hashtags fixes, consignes de ton)  = un compte TikTok
+Source (profile_id, plateforme, identifiant, actif, filtres, dernière_vérif)
+Video  (profile_id, source_id | null si manuel, url, titre, statut_traitement)
   └── Clip (mp4, score, description, statut: prêt|posté|rejeté, date_posté, lien_tiktok)
 ```
 
@@ -31,3 +32,7 @@ transcription déportée quand possible, source supprimée dès les clips rendus
 
 À l'ajout d'une chaîne : 2 dernières vidéos, puis uniquement les nouvelles publications.
 Les liens manuels passent en priorité.
+
+Un clip n'appartient qu'à un profil (celui de sa vidéo) : il n'est destiné qu'à un seul compte.
+Le thème, la langue et le ton du profil sont injectés dans le prompt de sélection ; ses hashtags fixes
+sont placés avant ceux de l'IA dans la légende.

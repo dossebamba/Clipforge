@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}Profils · Clipforge{% endblock %}
+{% block content %}
+<h1>Profils</h1>
+<p class="sub">Un profil = un compte TikTok / un thème. Chaque chaîne et chaque vidéo appartient à un seul profil, donc un clip n'est destiné qu'à un seul compte. Le thème et le ton guident l'IA.</p>
+
+{% if error %}<div class="auth-error" role="alert">{{ error }}</div>{% endif %}
+
+<div class="panel">
+  <h2>Nouveau profil</h2>
+  <form method="post" action="/profiles" class="profile-form">
+    <label><small>Nom du profil</small><input type="text" name="name" required maxlength="40" placeholder="Voiture"></label>
+    <label><small>Thème (aide l'IA à choisir les moments)</small>
+      <input type="text" name="niche" maxlength="200" placeholder="automobile, sportives, tuning"></label>
+    <label><small>Langue des textes</small><input type="text" name="language" value="français" maxlength="40"></label>
+    <label><small>Hashtags fixes (toujours ajoutés, 5 max)</small>
+      <input type="text" name="base_hashtags" placeholder="#voiture #auto #supercar"></label>
+    <label class="wide"><small>Consignes de ton (facultatif)</small>
+      <input type="text" name="style" maxlength="500" placeholder="ton direct et enthousiaste, vocabulaire de passionné, pas d'emojis"></label>
+    <button class="primary">Créer le profil</button>
+  </form>
+</div>
+
+{% for row in rows %}
+{% set p = row.p %}
+<div class="panel">
+  <div class="row" style="justify-content:space-between">
+    <h2 style="margin:0">{{ p.name }}</h2>
+    <div class="row">
+      <span class="badge">{{ row.sources }} chaîne{{ 's' if row.sources != 1 }}</span>
+      <span class="badge ok">{{ row.ready }} à poster</span>
+      <span class="badge">{{ row.posted }} postés</span>
+    </div>
+  </div>
+  <details style="margin-top:10px">
+    <summary class="meta" style="cursor:pointer">Modifier</summary>
+    <form method="post" action="/profiles/{{ p.id }}" class="profile-form" style="margin-top:10px">
+      <label><small>Nom</small><input type="text" name="name" value="{{ p.name }}" required maxlength="40"></label>
+      <label><small>Thème</small><input type="text" name="niche" value="{{ p.niche }}" maxlength="200"></label>
+      <label><small>Langue</small><input type="text" name="language" value="{{ p.language }}" maxlength="40"></label>
+      <label><small>Hashtags fixes</small><input type="text" name="base_hashtags" value="{{ p.base_hashtags }}"></label>
+      <label class="wide"><small>Consignes de ton</small><input type="text" name="style" value="{{ p.style }}" maxlength="500"></label>
+      <button class="primary">Enregistrer</button>
+    </form>
+    <form method="post" action="/profiles/{{ p.id }}/delete" style="margin-top:10px"
+          onsubmit="return confirm('Supprimer ce profil ?')">
+      <button class="danger">Supprimer ce profil</button>
+    </form>
+  </details>
+</div>
+{% endfor %}
+{% endblock %}

@@ -25,6 +25,7 @@ from clipforge.db.session import session_scope
 from clipforge.llm.router import LLMRouter
 from clipforge.pipeline import describe, download, render, transcribe
 from clipforge.pipeline import select as selector
+from clipforge.profiles import merge_hashtags
 
 log = logging.getLogger(__name__)
 
@@ -49,6 +50,13 @@ def process_video(
         assert v is not None
         v.status, v.stage, v.error = V_PROCESSING, "download", ""
         url, title, channel, platform = v.url, v.title, v.channel_name, v.platform
+        p = v.profile
+        style = selector.Style(
+            language=p.language if p else "",
+            niche=p.niche if p else "",
+            instructions=p.style if p else "",
+            hashtags=p.hashtag_list if p else [],
+        )
 
     dl_dir = settings.downloads_dir / str(video_id)
     work = settings.work_dir / str(video_id)
@@ -61,7 +69,7 @@ def process_video(
 
         _set_stage(factory, video_id, "select")
         duration = dl.duration_s or (words[-1].end if words else 0)
-        cands = selector.select_clips(router, words, duration, title, channel, settings)
+        cands = selector.select_clips(router, words, duration, title, channel, settings, style)
 
         created = 0
         for i, c in enumerate(cands, start=1):
@@ -82,7 +90,11 @@ def process_video(
                         score=c.score,
                         title=c.title,
                         hook=c.hook,
-                        description=describe.build_caption(c.description, c.hashtags, channel),
+                        description=describe.build_caption(
+                            c.description,
+                            merge_hashtags(style.hashtags, c.hashtags),
+                            channel,
+                        ),
                         reason=c.reason,
                         status=C_READY,
                     )
