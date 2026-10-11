@@ -20,14 +20,34 @@
   {% else %}<span class="meta">File vide.</span>{% endfor %}
 </div>
 
+{# Bouton « tout supprimer » d'une liste (masque les entrées de l'historique) #}
+{% macro clear_all(kind, label) %}
+<form method="post" action="/activity/clear"
+      onsubmit="return confirm('{{ label }} ? Les vidéos concernées ne seront pas retraitées automatiquement.')">
+  <input type="hidden" name="kind" value="{{ kind }}">
+  <button class="danger">{{ label }}</button>
+</form>
+{% endmacro %}
+{% macro dismiss(v) %}
+<form method="post" action="/videos/{{ v.id }}/dismiss"><button class="danger" title="Retirer de l'historique">Supprimer</button></form>
+{% endmacro %}
+
 {% if failed %}
 <div class="panel">
-  <h2>Échecs</h2>
+  <div class="row" style="justify-content:space-between">
+    <h2 style="margin:0">Échecs ({{ failed | length }})</h2>
+    {{ clear_all('failed', 'Tout supprimer') }}
+  </div>
   {% for v in failed %}
-    <div style="padding:6px 0;border-bottom:1px solid var(--line)">
-      <div class="row"><b>{{ v.title or v.url }}</b>
-        <form method="post" action="/videos/{{ v.id }}/retry"><button>Réessayer</button></form></div>
-      <div class="err">{{ v.error }}</div>
+    <div style="padding:8px 0;border-bottom:1px solid var(--line)">
+      <div class="row" style="justify-content:space-between">
+        <b>{{ v.title or v.url }}</b>
+        <div class="row">
+          <form method="post" action="/videos/{{ v.id }}/retry"><button>Réessayer</button></form>
+          {{ dismiss(v) }}
+        </div>
+      </div>
+      <div class="err" style="word-break:break-word">{{ v.error }}</div>
     </div>
   {% endfor %}
 </div>
@@ -35,15 +55,31 @@
 
 {% if empty %}
 <div class="panel">
-  <h2>Traitées sans clip</h2>
-  {% for v in empty %}<div class="row"><a href="/video/{{ v.id }}">{{ v.title or v.url }}</a><span class="meta">{{ v.error }}</span></div>{% endfor %}
+  <div class="row" style="justify-content:space-between">
+    <h2 style="margin:0">Traitées sans clip ({{ empty | length }})</h2>
+    {{ clear_all('empty', 'Tout supprimer') }}
+  </div>
+  {% for v in empty %}
+    <div class="row" style="justify-content:space-between;padding:4px 0">
+      <span><a href="/video/{{ v.id }}">{{ v.title or v.url }}</a> <span class="meta">{{ v.error }}</span></span>
+      {{ dismiss(v) }}
+    </div>
+  {% endfor %}
 </div>
 {% endif %}
 
 {% if skipped %}
 <div class="panel">
-  <h2>Ignorées par les filtres</h2>
-  {% for v in skipped %}<div class="row"><span>{{ v.title or v.url }}</span><span class="meta">{{ v.error }}</span></div>{% endfor %}
+  <div class="row" style="justify-content:space-between">
+    <h2 style="margin:0">Ignorées par les filtres</h2>
+    {{ clear_all('skipped', 'Tout supprimer') }}
+  </div>
+  {% for v in skipped %}
+    <div class="row" style="justify-content:space-between;padding:4px 0">
+      <span>{{ v.title or v.url }} <span class="meta">{{ v.error }}</span></span>
+      {{ dismiss(v) }}
+    </div>
+  {% endfor %}
 </div>
 {% endif %}
 {% endblock %}

@@ -28,6 +28,7 @@ from clipforge.db.models import (
     V_FAILED,
     V_PENDING,
     V_PROCESSING,
+    V_SEEN,
     V_SKIPPED,
     Clip,
     Profile,
@@ -361,12 +362,48 @@ def create_app(
         shutil.rmtree(settings.clips_dir / str(video_id), ignore_errors=True)
         return back(request, "/activity")
 
+    def retire(video: Video, db: Session) -> None:
+        """Retire une vidéo de l'historique sans qu'elle revienne : on supprime ses clips et ses
+        fichiers, puis on la marque « vue ». Supprimer la ligne ferait que le prochain relevé de la
+        chaîne la retrouverait parmi les vidéos récentes et la remettrait en file."""
+        for c in list(video.clips):
+            db.delete(c)
+        shutil.rmtree(settings.clips_dir / str(video.id), ignore_errors=True)
+        video.status, video.stage, video.error = V_SEEN, "", ""
+
+    def dismissable(video: Video) -> bool:
+        """Erreurs, vidéos ignorées et vidéos traitées sans clip : rien à perdre à les masquer."""
+        return video.status in (V_FAILED, V_SKIPPED) or (video.status == V_DONE and not video.clips)
+
+    @protected.post("/videos/{video_id}/dismiss")
+    def dismiss(video_id: int, request: Request, db: Session = Depends(get_db)):
+        video = db.get(Video, video_id)
+        if not video:
+            raise HTTPException(404)
+        if dismissable(video):
+            retire(video, db)
+        return back(request, "/activity")
+
+    @protected.post("/activity/clear")
+    def clear_activity(request: Request, kind: str = Form(...), db: Session = Depends(get_db)):
+        """Vide une liste de l'Activité (dans le profil actif s'il y en a un)."""
+        statuses = {"failed": V_FAILED, "skipped": V_SKIPPED, "empty": V_DONE}
+        if kind not in statuses:
+            raise HTTPException(400, "Liste inconnue")
+        for video in list(db.scalars(video_query(request).where(Video.status == statuses[kind]))):
+            if dismissable(video):  # « empty » ne touche jamais une vidéo qui a des clips
+                retire(video, db)
+        return back(request, "/activity")
+
     @protected.post("/videos/{video_id}/delete")
     def delete_video(video_id: int, db: Session = Depends(get_db)):
         video = db.get(Video, video_id)
         if video:
-            shutil.rmtree(settings.clips_dir / str(video_id), ignore_errors=True)
-            db.delete(video)
+            if video.source_id is None:
+                shutil.rmtree(settings.clips_dir / str(video_id), ignore_errors=True)
+                db.delete(video)  # lien manuel : aucun relevé ne peut le rajouter
+            else:
+                retire(video, db)  # chaîne surveillée : on garde une trace pour ne pas le retraiter
         return RedirectResponse("/", status_code=303)
 
     # ---------- Sources ----------

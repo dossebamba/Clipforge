@@ -22,7 +22,8 @@ class Settings(BaseSettings):
     twitch_client_secret: str = ""
 
     # Modèles
-    gemini_model: str = "gemini-flash-latest"  # alias : suit le modèle Flash courant
+    # Modèles Gemini essayés dans l'ordre (quota gratuit compté par modèle) ; alias « latest »
+    gemini_model: str = "gemini-flash-latest,gemini-flash-lite-latest"
     groq_model: str = "openai/gpt-oss-120b"
     openrouter_model: str = "openai/gpt-oss-120b:free"
     groq_whisper_model: str = "whisper-large-v3-turbo"
