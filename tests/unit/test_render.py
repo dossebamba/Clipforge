@@ -29,6 +29,42 @@ def test_ass_has_hook_and_one_event_per_word_relative_to_clip():
     assert "UN" not in " ".join(subs)  # mot avant le clip exclu
 
 
+def _hook_event(ass):
+    return next(e for e in ass.splitlines() if e.startswith("Dialogue") and ",Hook," in e)
+
+
+def test_hook_stays_on_screen_for_the_whole_clip():
+    ass = build_ass(_words(), clip_start=0.5, clip_end=2.5, hook="Regarde ça", settings=S)
+    _, start, end = _hook_event(ass).split(",")[:3]
+    assert (start, end) == ("0:00:00.00", "0:00:02.00")  # toute la durée du clip
+
+
+def test_hook_also_covers_the_teaser_when_there_is_one():
+    from clipforge.pipeline.render import Transform
+
+    t = Transform(teaser=(1.0, 4.0))  # 3 s rejouées en ouverture
+    ass = build_ass(_words(), 0.5, 2.5, "Regarde ça", S, t)
+    assert _hook_event(ass).split(",")[2] == "0:00:05.00"  # 3 s + 2 s
+
+
+def test_hook_does_not_fade_out():
+    ass = build_ass(_words(), 0.0, 10.0, "Accroche", S)
+    assert "\\fad(150,0)" in _hook_event(ass)  # apparition en fondu, aucune disparition
+
+
+def test_callout_cannot_sit_on_top_of_the_permanent_hook():
+    """L'accroche est en haut en permanence : les remarques passent dessous, plus bas."""
+    from clipforge.pipeline.render import Transform
+
+    ass = build_ass(_words(), 0.0, 20.0, "Accroche", S, Transform(callouts=[(10.0, "Info")]))
+    margin = lambda style: int(  # noqa: E731
+        next(line for line in ass.splitlines() if line.startswith(f"Style: {style},")).split(",")[
+            -2
+        ]
+    )
+    assert margin("Callout") > margin("Hook")  # marges mesurées depuis le haut de l'écran
+
+
 def test_subtitle_lines_stay_short_enough_for_the_screen():
     from clipforge.pipeline.render import MAX_LINE_CHARS, _chunks
 

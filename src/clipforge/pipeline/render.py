@@ -32,7 +32,8 @@ Style: Brand,{font},{small_size},{white},{white},{black},&H00000000,-1,0,0,0,100
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 """
 
-HOOK_DURATION_S = 3.0
+# L'accroche reste affichée pendant tout le clip : elle donne en permanence une raison de rester.
+CALLOUT_MIN_START_S = 3.0  # on laisse l'accroche seule à l'écran les premières secondes
 CALLOUT_DURATION_S = 2.8
 MAX_WORDS_PER_LINE = 3
 MAX_LINE_CHARS = 17  # en capitales à 88 px, au-delà une ligne sort de l'écran
@@ -130,7 +131,7 @@ def build_ass(
             h=h,
             font=settings.font_name,
             sub_size=int(h * 0.046),
-            hook_size=int(h * 0.038),
+            hook_size=int(h * 0.034),  # permanent : un peu plus compact qu'un bandeau passager
             callout_size=int(h * 0.032),
             small_size=int(h * 0.022),
             white=WHITE,
@@ -138,22 +139,21 @@ def build_ass(
             yellow=YELLOW,
             outline=7,
             sub_margin=int(h * 0.27),
-            hook_margin=int(h * 0.14),
-            callout_margin=int(h * 0.20),
-            small_margin=int(h * 0.075),
+            hook_margin=int(h * 0.13),
+            callout_margin=int(h * 0.27),  # sous l'accroche, même quand elle tient sur 3 lignes
+            small_margin=int(h * 0.055),
         )
     ]
     if hook.strip():
-        end = min(HOOK_DURATION_S, total)
         lines.append(
-            f"Dialogue: 1,{ass_time(0)},{ass_time(end)},Hook,,0,0,0,,"
-            f"{{\\fad(150,200)}}{_esc(hook).upper()}"
+            f"Dialogue: 1,{ass_time(0)},{ass_time(total)},Hook,,0,0,0,,"
+            f"{{\\fad(150,0)}}{_esc(hook).upper()}"
         )
     if t.brand.strip():
         lines.append(f"Dialogue: 1,{ass_time(0)},{ass_time(total)},Brand,,0,0,0,,{_esc(t.brand)}")
     for at, text in t.callouts:
         rel = at - clip_start + lead
-        if _esc(text) and HOOK_DURATION_S <= rel < total:
+        if _esc(text) and CALLOUT_MIN_START_S <= rel < total:
             end = min(rel + CALLOUT_DURATION_S, total)
             lines.append(
                 f"Dialogue: 2,{ass_time(rel)},{ass_time(end)},Callout,,0,0,0,,"
