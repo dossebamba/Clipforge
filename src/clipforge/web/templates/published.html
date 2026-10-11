@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% from "_cards.html" import video_card, channel_filters %}
+{% block content %}
+<h1>Publiés</h1>
+<p class="sub">Vidéos dont tous les clips ont été postés.</p>
+{{ channel_filters(channels, channel, '/published') }}
+{% if videos %}
+<div class="grid">
+  {% for v in videos %}{{ video_card(v) }}{% endfor %}
+</div>
+{% else %}
+<div class="empty">Aucune vidéo entièrement publiée pour le moment.</div>
+{% endif %}
+{% endblock %}

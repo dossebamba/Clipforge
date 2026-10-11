@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block autorefresh %}{{ '1' if active or queued else '0' }}{% endblock %}
+{% block content %}
+<h1>Activité</h1>
+<p class="sub">Ce que fait Clipforge en ce moment. La page se rafraîchit seule pendant un traitement.</p>
+
+<div class="panel">
+  <h2>En cours</h2>
+  {% for v in active %}
+    <div class="row"><a href="/video/{{ v.id }}"><b>{{ v.title or v.url }}</b></a>
+      <span class="badge warn">⏳ {{ v.stage | stage }}</span></div>
+  {% else %}<span class="meta">Rien en cours.</span>{% endfor %}
+</div>
+
+<div class="panel">
+  <h2>File d'attente ({{ queued | length }})</h2>
+  {% for v in queued %}
+    <div class="row" style="padding:3px 0"><a href="/video/{{ v.id }}">{{ v.title or v.url }}</a>
+      <span class="meta">{{ v.origin }}</span>{% if v.priority %}<span class="badge">prioritaire</span>{% endif %}</div>
+  {% else %}<span class="meta">File vide.</span>{% endfor %}
+</div>
+
+{% if failed %}
+<div class="panel">
+  <h2>Échecs</h2>
+  {% for v in failed %}
+    <div style="padding:6px 0;border-bottom:1px solid var(--line)">
+      <div class="row"><b>{{ v.title or v.url }}</b>
+        <form method="post" action="/videos/{{ v.id }}/retry"><button>Réessayer</button></form></div>
+      <div class="err">{{ v.error }}</div>
+    </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+{% if empty %}
+<div class="panel">
+  <h2>Traitées sans clip</h2>
+  {% for v in empty %}<div class="row"><a href="/video/{{ v.id }}">{{ v.title or v.url }}</a><span class="meta">{{ v.error }}</span></div>{% endfor %}
+</div>
+{% endif %}
+
+{% if skipped %}
+<div class="panel">
+  <h2>Ignorées par les filtres</h2>
+  {% for v in skipped %}<div class="row"><span>{{ v.title or v.url }}</span><span class="meta">{{ v.error }}</span></div>{% endfor %}
+</div>
+{% endif %}
+{% endblock %}

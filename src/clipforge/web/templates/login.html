@@ -1,0 +1,18 @@
+{% extends "auth_base.html" %}
+{% block title %}Connexion · Clipforge{% endblock %}
+{% block content %}
+<h1>Connexion</h1>
+<p class="sub">Accède à ton dashboard de clips.</p>
+{% if error %}<div class="auth-error" role="alert">{{ error }}</div>{% endif %}
+<form method="post" action="/login" class="auth-form">
+  <input type="hidden" name="next" value="{{ next }}">
+  <label><small>E-mail</small>
+    <input type="email" name="email" value="{{ email }}" required autocomplete="username" autofocus></label>
+  <label><small>Mot de passe</small>
+    <input type="password" name="password" required autocomplete="current-password"></label>
+  <button class="primary">Se connecter</button>
+</form>
+{% if can_register %}
+<p class="auth-alt">Pas encore de compte ? <a href="/register">Créer un compte</a></p>
+{% endif %}
+{% endblock %}
